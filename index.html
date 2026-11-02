@@ -353,22 +353,17 @@ function editChap(id, v) {
 }
 async function showSparks() {
   const box = document.getElementById('sparkResults');
+  box.innerHTML = '<div class="spark-item" style="color:#888">AI 諗緊…等幾秒</div>';
   box.classList.add('show');
   const s = getStory();
-  // 先即刻出本地靈感，唔使等 AI（AI 返嚟先再補上）
-  const local = [...buildContextSparks(s), ...SPARKS].sort(() => Math.random() - .5).slice(0, 3);
-  box.innerHTML = local.map(p => `<div class="spark-item">${esc(p)}</div>`).join('');
-  // 背景問 AI，返嚟先升級
   const ai = await fetchAISparks(s);
   // 相關度檢查：AI 成日唔理 context 作啲無關嘢 — 冇一個靈感掂到故事關鍵字就當佢失敗
   const kws = sparkKeywords(s);
   const ok = ai.length === 3 && sparksRelevant(ai, kws);
   if (ok) {
-    box.innerHTML = ai.map(p => `<div class="spark-item">${esc(p)}</div>`).join('')
-      + '<div class="spark-note">（AI 即場諗嘅）</div>';
+    box.innerHTML = ai.map(p => `<div class="spark-item">${esc(p)}</div>`).join('');
   } else {
-    box.innerHTML = local.map(p => `<div class="spark-item">${esc(p)}</div>`).join('')
-      + '<div class="spark-note">（AI 忙緊，呢啲係預寫嘅靈感）</div>';
+    box.innerHTML = '<div class="spark-item" style="color:#888">AI 忙緊，遲啲再撳過</div>';
   }
 }
 // 故事關鍵字：標題、人物名、近排寫嘅字 — 用嚟驗 AI 有冇離題
