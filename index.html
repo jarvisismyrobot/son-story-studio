@@ -96,7 +96,7 @@
 <div id="app">
   <header>
     <h1>故事工作室</h1>
-    <p>意念係你嘅，AI 淨係隻手 · v1.17</p>
+    <p>意念係你嘅，AI 淨係隻手 · v1.18</p>
   </header>
   <nav class="tabs">
     <button class="active" data-tab="library">故事架</button>
@@ -323,8 +323,8 @@ function renderLibrary() {
   state.stories.forEach((s, i) => {
     const ch = s.chapters.length;
     html += `<div class="story-card" onclick="openStory('${s.id}')">
-      <div class="story-cover" style="background:${COVERS[i % COVERS.length]}" onclick="event.stopPropagation();pickCover('${s.id}')" title="撳嚟轉封面">${coverHTML(s, i)}</div>
-      <div class="info"><span class="del" onclick="event.stopPropagation();delStory('${s.id}')">×</span>
+      <div class="story-cover" style="background:${COVERS[i % COVERS.length]}">${coverHTML(s, i)}</div>
+      <div class="info"><span class="del" onclick="event.stopPropagation();delStory('${s.id}')">×</span><span class="del" onclick="event.stopPropagation();pickCover('${s.id}')" title="轉封面">🎨</span>
       <div class="title">${esc(s.title)}</div><div class="meta">${ch} 章 · ${fmtDate(s.updatedAt)}更新</div></div></div>`;
   });
   html += '</div><button class="big-btn" onclick="newStory()">＋ 開新故事</button>';
