@@ -37,8 +37,11 @@
   .story-card .info { padding: 10px 12px 12px; }
   .story-card .title { font-size: 15px; font-weight: bold; color: #fff; }
   .story-card .meta { font-size: 11px; color: #8888a0; margin-top: 4px; }
-  .story-card .del { float: right; color: #666; font-size: 16px; padding: 2px 6px; }
-  .story-card .del:active { color: #e94560; }
+  .card-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .card-btn { flex: 1; background: #1a1a2e; border: 1px solid #3a3a5c; color: #aaa; border-radius: 8px; padding: 9px 4px; font-size: 12px; cursor: pointer; font-family: inherit; }
+  .card-btn:active { border-color: #ffd369; color: #ffd369; }
+  .card-btn.danger { color: #e94560; border-color: #e9456044; }
+  .card-btn.danger:active { border-color: #e94560; color: #e94560; }
   .big-btn { margin-top: 16px; width: 100%; padding: 16px; background: linear-gradient(135deg, #e94560, #c73e5a); color: #fff; border: none; border-radius: 14px; font-size: 16px; font-weight: bold; cursor: pointer; font-family: inherit; }
   .backup-row { display: flex; gap: 10px; margin-top: 12px; }
   .backup-btn { flex: 1; background: #252542; border: 1px solid #3a3a5c; color: #aaa; border-radius: 12px; padding: 12px; font-size: 14px; cursor: pointer; font-family: inherit; }
@@ -96,7 +99,7 @@
 <div id="app">
   <header>
     <h1>故事工作室</h1>
-    <p>意念係你嘅，AI 淨係隻手 · v1.18</p>
+    <p>意念係你嘅，AI 淨係隻手 · v1.19</p>
   </header>
   <nav class="tabs">
     <button class="active" data-tab="library">故事架</button>
@@ -324,8 +327,12 @@ function renderLibrary() {
     const ch = s.chapters.length;
     html += `<div class="story-card" onclick="openStory('${s.id}')">
       <div class="story-cover" style="background:${COVERS[i % COVERS.length]}">${coverHTML(s, i)}</div>
-      <div class="info"><span class="del" onclick="event.stopPropagation();delStory('${s.id}')">×</span><span class="del" onclick="event.stopPropagation();pickCover('${s.id}')" title="轉封面">🎨</span>
-      <div class="title">${esc(s.title)}</div><div class="meta">${ch} 章 · ${fmtDate(s.updatedAt)}更新</div></div></div>`;
+      <div class="info">
+      <div class="title">${esc(s.title)}</div><div class="meta">${ch} 章 · ${fmtDate(s.updatedAt)}更新</div>
+      <div class="card-actions">
+        <button class="card-btn" onclick="event.stopPropagation();pickCover('${s.id}')">🎨 轉封面</button>
+        <button class="card-btn danger" onclick="event.stopPropagation();delStory('${s.id}')">🗑 刪除</button>
+      </div></div></div>`;
   });
   html += '</div><button class="big-btn" onclick="newStory()">＋ 開新故事</button>';
   html += `<div class="backup-row">
@@ -404,7 +411,7 @@ function newStory() {
   save(); goTab('write');
 }
 function openStory(id) { state.activeStory = id; const s = getStory(); state.activeChapter = s.chapters[0] ? s.chapters[0].id : null; save(); goTab('write'); }
-function delStory(id) { if (!confirm('真係刪咗呢個故事？')) return; state.stories = state.stories.filter(s => s.id !== id); if (state.activeStory === id) state.activeStory = null; save(); render(); }
+function delStory(id) { const s = state.stories.find(x => x.id === id); if (!confirm(`真係刪咗「${s ? s.title : ''}」成個故事？\n刪咗就冇得返轉頭㗎喇`)) return; state.stories = state.stories.filter(s => s.id !== id); if (state.activeStory === id) state.activeStory = null; save(); render(); }
 function touchStory() { const s = getStory(); if (s) { s.updatedAt = Date.now(); save(); } }
 
 // ============ Write ============
