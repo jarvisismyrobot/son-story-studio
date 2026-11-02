@@ -357,23 +357,46 @@ async function showSparks() {
   box.classList.add('show');
   const s = getStory();
   const ai = await fetchAISparks(s);
+  // 相關度檢查：AI 成日唔理 context 作啲無關嘢 — 冇一個靈感掂到故事關鍵字就當佢失敗
+  const kws = sparkKeywords(s);
+  const ok = ai.length === 3 && sparksRelevant(ai, kws);
   // AI 唔得就跌返落 static 庫
-  const picks = ai.length ? ai : [...buildContextSparks(s), ...SPARKS].sort(() => Math.random() - .5).slice(0, 3);
+  const picks = ok ? ai : [...buildContextSparks(s), ...SPARKS].sort(() => Math.random() - .5).slice(0, 3);
   box.innerHTML = picks.map(p => `<div class="spark-item">${esc(p)}</div>`).join('')
-    + (ai.length ? '' : '<div class="spark-note">（AI 忙緊，呢啲係預寫嘅靈感）</div>');
+    + (ok ? '' : '<div class="spark-note">（AI 忙緊，呢啲係預寫嘅靈感）</div>');
+}
+// 故事關鍵字：標題、人物名、近排寫嘅字 — 用嚟驗 AI 有冇離題
+function sparkKeywords(s) {
+  if (!s) return [];
+  const kws = [];
+  if (s.title && s.title !== '未命名故事')
+    s.title.split(/[\s《》「」『』，、。！？!?,.;:：；]+/).filter(w => w.length >= 2).forEach(w => kws.push(w));
+  s.characters.forEach(c => { if (c.name && c.name.trim()) kws.push(c.name.trim()); });
+  const ch = s.chapters.find(c => c.id === state.activeChapter);
+  if (ch && ch.content)
+    ch.content.split(/\s+/).map(w => w.replace(/[^A-Za-z]/g, '')).filter(w => w.length >= 4).slice(-12).forEach(w => kws.push(w));
+  return [...new Set(kws.map(k => k.toLowerCase()))];
+}
+function sparksRelevant(sparks, kws) {
+  if (!kws.length) return true;
+  return sparks.some(sp => { const l = sp.toLowerCase(); return kws.some(k => k && l.includes(k)); });
 }
 // 真 AI：將故事 context 送去 LLM，即場諗靈感
 async function fetchAISparks(s) {
   try {
     const names = s ? s.characters.map(c => c.name + (c.desc ? '（' + c.desc.slice(0, 30) + '）' : '')).join('；') : '';
     const ch = s ? s.chapters.find(c => c.id === state.activeChapter) : null;
-    const excerpt = ch && ch.content ? ch.content.slice(-200) : '';
-    const parts = ['你係幫12歲小朋友寫故事嘅靈感助手，只用繁體中文回覆。'];
+    const excerpt = ch && ch.content ? ch.content.slice(-500) : '';
+    const sample = [s && s.title, excerpt].filter(Boolean).join(' ');
+    const isEN = sample && (sample.replace(/[^A-Za-z]/g, '').length > sample.replace(/[^一-鿿]/g, '').length * 2);
+    const lang = isEN ? '用英文回覆' : '只用繁體中文回覆';
+    const parts = ['你係幫12歲小朋友寫故事嘅靈感助手，' + lang + '。'];
     if (s && s.title && s.title !== '未命名故事') parts.push('故事名：《' + s.title + '》');
     if (names) parts.push('人物：' + names);
     if (ch) parts.push('寫緊：' + ch.title);
     if (excerpt) parts.push('近排寫咗：' + excerpt);
     parts.push('畀3個簡短故事靈感，每個一至兩句，只係方向唔好寫成段故仔。每行一個，唔加編號，唔加解釋。');
+    parts.push('重要：每一個靈感都要直接用到上面嘅故事名、人物名或者已寫內容，唔准作新嘅無關人物、地方或者世界觀（例如唔好突然寫沙漠/森林/水晶呢啲同故事無關嘅嘢）。資料唔夠就問一條關於主角嘅問題。');
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 25000);
     const res = await fetch('https://text.pollinations.ai/' + encodeURIComponent(parts.join('\n')), { signal: ctrl.signal });
