@@ -87,22 +87,6 @@
   .photo-preview img { width: 100%; height: 100%; object-fit: cover; }
   .photo-btn { background: #1a1a2e; border: 1px solid #3a3a5c; color: #aaa; border-radius: 8px; padding: 10px 14px; font-size: 13px; cursor: pointer; font-family: inherit; }
   .char-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
-  .illus-heading { font-size: 13px; color: #8888a0; margin: 4px 0 12px; }
-  .illus-heading b { color: #ffd369; }
-
-  /* Illustrations */
-  .illus-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
-  .illus-item { border-radius: 12px; overflow: hidden; position: relative; background: #252542; }
-  .illus-item img { width: 100%; height: 140px; object-fit: cover; display: block; }
-  .illus-item .cap { font-size: 11px; color: #8888a0; padding: 8px 10px; line-height: 1.5; }
-  .illus-item .x { position: absolute; top: 6px; right: 6px; background: #000a; color: #fff; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; }
-  .ai-box { background: #252542; border-radius: 14px; padding: 16px; }
-  .ai-box .label { font-size: 14px; color: #ffd369; font-weight: bold; margin-bottom: 10px; }
-  .ai-box input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #3a3a5c; background: #1a1a2e; color: #eee; font-size: 14px; font-family: inherit; outline: none; margin-bottom: 10px; box-sizing: border-box; }
-  .ai-box .gen-btn { width: 100%; padding: 14px; background: linear-gradient(135deg, #533483, #7b2ff7); color: #fff; border: none; border-radius: 10px; font-size: 15px; font-weight: bold; cursor: pointer; font-family: inherit; }
-  .ai-box .gen-btn:disabled { opacity: .5; }
-  .ai-note { margin-top: 10px; font-size: 11px; color: #8888a0; text-align: center; line-height: 1.8; }
-  .loading { text-align: center; padding: 20px; color: #8888a0; font-size: 13px; }
 
   .story-picker { margin-bottom: 14px; }
   .story-picker select { width: 100%; background: #252542; color: #ffd369; border: none; border-radius: 10px; padding: 12px; font-size: 15px; font-weight: bold; font-family: inherit; outline: none; }
@@ -112,19 +96,17 @@
 <div id="app">
   <header>
     <h1>故事工作室</h1>
-    <p>意念係你嘅，AI 淨係隻手 · v1.12</p>
+    <p>意念係你嘅，AI 淨係隻手 · v1.13</p>
   </header>
   <nav class="tabs">
     <button class="active" data-tab="library">故事架</button>
     <button data-tab="write">寫故事</button>
     <button data-tab="chars">人物卡</button>
-    <button data-tab="illus">插圖</button>
   </nav>
   <main>
     <section class="page active" id="page-library"></section>
     <section class="page" id="page-write"></section>
     <section class="page" id="page-chars"></section>
-    <section class="page" id="page-illus"></section>
   </main>
 </div>
 
@@ -561,128 +543,12 @@ function delChar(id) {
   s.characters = s.characters.filter(x => x.id !== id); touchStory(); renderChars();
 }
 
-// ============ Illustrations ============
-function renderIllus() {
-  const el = document.getElementById('page-illus');
-  const s = getStory();
-  if (!s) { el.innerHTML = '<div class="empty">去故事架揀個故事先</div>'; return; }
-  let html = storyPickerHTML();
-  html += `<div class="illus-heading">以下係 <b>《${esc(s.title)}》</b> 嘅插圖，每個故事有自己嘅插圖庫</div>`;
-  html += '<div class="illus-grid" id="illusGrid">';
-  [...s.illustrations].reverse().forEach(im => {
-    html += `<div class="illus-item"><span class="x" onclick="delIllus('${im.id}')">×</span>
-      <img src="${im.url}" loading="lazy" alt=""><div class="cap">${esc(im.prompt)}</div></div>`;
-  });
-  html += '</div>';
-  if (!s.illustrations.length) html += '<div class="empty" style="padding:20px">未有插圖，喺下面形容你想畫嘅嘢</div>';
-  html += `<div class="ai-box">
-    <div class="label">✦ AI 幫你畫出嚟</div>
-    <input id="illusPrompt" placeholder="形容你想畫嘅嘢，例如：識飛嘅石頭怪獸">
-    <button class="gen-btn" id="genBtn" onclick="genIllus()">畫出嚟！</button>
-    <div class="ai-note">故事同意念全部係你嘅<br>AI 淨係負責畫，唔會幫你諗</div>
-    <div class="loading" id="illusLoading" style="display:none">🎨 畫緊…通常要等 10–30 秒，唔好閂</div>
-  </div>`;
-  el.innerHTML = html;
-}
-let lastGenTime = 0;
-try { lastGenTime = parseInt(localStorage.getItem(KEY + '_lastGen') || '0', 10) || 0; } catch (e) {}
-const GEN_COOLDOWN = 50000; // 免費版 45 秒一張，留返啲 buffer
-// 檢測係咪 Pollinations 回嘅錯誤圖（純色底+黑字，得幾隻色；真圖有幾十隻色以上）
-function isErrorImage(img) {
-  return new Promise(resolve => {
-    try {
-      const cv = document.createElement('canvas');
-      cv.width = 48; cv.height = 48;
-      const ctx = cv.getContext('2d');
-      ctx.drawImage(img, 0, 0, 48, 48);
-      const d = ctx.getImageData(0, 0, 48, 48).data;
-      const colors = new Set();
-      for (let i = 0; i < d.length; i += 16) {
-        const key = Math.round(d[i]/32)*32 + ',' + Math.round(d[i+1]/32)*32 + ',' + Math.round(d[i+2]/32)*32;
-        colors.add(key);
-        if (colors.size > 30) break;
-      }
-      resolve(colors.size <= 12);
-    } catch(e){ resolve(false); }
-  });
-}
-async function genIllus() {
-  const s = getStory(); if (!s) return;
-  const wait = GEN_COOLDOWN - (Date.now() - lastGenTime);
-  if (wait > 0) { alert(`免費版 45 秒先畫到一張，等多 ${Math.ceil(wait/1000)} 秒再試`); return; }
-  const input = document.getElementById('illusPrompt');
-  const prompt = input.value.trim();
-  if (!prompt) { alert('形容下你想畫咩先'); return; }
-  const btn = document.getElementById('genBtn'); const loading = document.getElementById('illusLoading');
-  btn.disabled = true; btn.textContent = '畫緊…'; loading.style.display = 'block';
-  let done = false;
-  const reset = () => { btn.disabled = false; btn.textContent = '畫出嚟！'; loading.style.display = 'none'; };
-  const fail = msg => { if (done) return; done = true; alert(msg); reset(); };
-  try {
-    // 包裝 prompt：指明係兒童故事插圖，冇咁易觸發 content filter，風格亦統一啲
-    const enhanced = '兒童故事書插圖：' + prompt + '，色彩豐富，細節精美，溫暖奇幻風格';
-    const url = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(enhanced) + '?width=768&height=768&nologo=true&seed=' + Date.now();
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 90000);
-    const res = await fetch(url, { signal: ctrl.signal });
-    clearTimeout(t);
-    const ct = res.headers.get('content-type') || '';
-    // API 回 JSON 即係出錯（rate limit / server 忙 / 被擋），唔係圖 — 自動等佢話嘅秒數再試過
-    if (ct.includes('application/json')) {
-      let secs = 0, reason = '';
-      try {
-        const err = await res.json();
-        reason = err?.error?.message || err?.message || '';
-        const m = reason.match(/retry after (\d+)s/i);
-        if (m) secs = Math.min(parseInt(m[1], 10), 60);
-      } catch (e) {}
-      if (secs > 0) {
-        btn.textContent = `多人畫緊，${secs} 秒後自動再試…`;
-        await new Promise(r => setTimeout(r, secs * 1000));
-        if (done) return;
-        // retry：唔用舊 seed，等 server 派新圖
-        reset();
-        lastGenTime = 0;
-        genIllus();
-        return;
-      }
-      fail(reason ? '畫唔到：' + reason.slice(0, 80) : '畫唔到，等陣再試');
-      return;
-    }
-    const blob = await res.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const img = new Image();
-    img.onload = async () => {
-      if (done) return;
-      // 第二重防線：萬一係 render 出嚟嘅 error 圖（純色+字）
-      if (await isErrorImage(img)) { URL.revokeObjectURL(blobUrl); fail('張圖俾擋咗，等陣再試，或者寫具體啲'); return; }
-      done = true;
-      lastGenTime = Date.now();
-      try { localStorage.setItem(KEY + '_lastGen', String(lastGenTime)); } catch (e) {}
-      // 存 blob 轉做 dataURL，等 gallery 唔使再問 server 攞
-      const fr = new FileReader();
-      fr.onload = e => {
-        s.illustrations.push({ id: uid(), prompt, url: e.target.result, created: Date.now() });
-        touchStory(); renderIllus();
-      };
-      fr.readAsDataURL(blob);
-      URL.revokeObjectURL(blobUrl);
-    };
-    img.onerror = () => { URL.revokeObjectURL(blobUrl); fail('張圖load唔到，試多次'); };
-    img.src = blobUrl;
-  } catch (e) { fail('網絡有問題，試多次'); }
-}
-function delIllus(id) {
-  if (!confirm('真係刪咗呢張插圖？')) return;
-  const s = getStory(); s.illustrations = s.illustrations.filter(i => i.id !== id); touchStory(); renderIllus();
-}
 
 // ============ Render ============
 function render() {
   if (activeTab === 'library') renderLibrary();
   else if (activeTab === 'write') renderWrite();
   else if (activeTab === 'chars') renderChars();
-  else if (activeTab === 'illus') renderIllus();
 }
 render();
 
