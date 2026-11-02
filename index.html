@@ -96,7 +96,7 @@
 <div id="app">
   <header>
     <h1>故事工作室</h1>
-    <p>意念係你嘅，AI 淨係隻手 · v1.14</p>
+    <p>意念係你嘅，AI 淨係隻手 · v1.15</p>
   </header>
   <nav class="tabs">
     <button class="active" data-tab="library">故事架</button>
@@ -290,7 +290,11 @@ function renderLibrary() {
     <button class="backup-btn" onclick="document.getElementById('importFile').click()">📤 還原</button>
     <input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="importData(this)">
   </div>
-  <div class="backup-note">備份會將所有故事下載成一個檔案<br>轉機或者清 browser 資料之前記得備份</div>`;
+  <div class="backup-note">備份會將所有故事下載成一個檔案<br>轉機或者清 browser 資料之前記得備份</div>
+  <div class="backup-row" style="margin-top:10px">
+    <button class="backup-btn" onclick="checkUpdate()">🔄 檢查更新</button>
+  </div>
+  <div class="backup-note" id="updateNote"></div>`;
   el.innerHTML = html;
 }
 // 備份：成個 state 下載做 JSON（export 前先將舊 remote 圖轉做 dataURL，確保齊圖）
@@ -618,6 +622,21 @@ function render() {
 render();
 
 // ============ PWA: service worker ============
+async function checkUpdate() {
+  const note = document.getElementById('updateNote');
+  const say = t => { if (note) note.textContent = t; };
+  try {
+    if (!('serviceWorker' in navigator)) { say('呢個瀏覽器唔支援'); return; }
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg) { say('未啟用離線模式，開返網再試'); return; }
+    say('檢查緊…');
+    await reg.update(); // 掠過 cache，直接問 GitHub 攞最新版
+    let done = false;
+    const go = () => { if (!done) { done = true; location.reload(); } };
+    navigator.serviceWorker.addEventListener('controllerchange', go);
+    setTimeout(go, 2500); // 保底：點都有 reload
+  } catch (e) { say('檢查失敗，遲啲再試'); }
+}
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').catch(() => {});
