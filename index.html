@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>故事工作室</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#16213e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="故事工作室">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "PingFang HK", "Microsoft JhengHei", sans-serif; background: #141422; color: #eee; min-height: 100vh; }
+  #app { max-width: 480px; margin: 0 auto; min-height: 100vh; background: #1a1a2e; display: flex; flex-direction: column; }
+
+  header { background: linear-gradient(135deg, #16213e, #0f3460); padding: 20px 20px 14px; }
+  header h1 { font-size: 22px; color: #ffd369; letter-spacing: 2px; }
+  header p { font-size: 12px; color: #a0a0b8; margin-top: 4px; }
+
+  nav.tabs { display: flex; background: #0f0f1e; position: sticky; top: 0; z-index: 10; }
+  nav.tabs button { flex: 1; background: none; border: none; padding: 14px 4px; font-size: 14px; color: #8888a0; cursor: pointer; border-bottom: 3px solid transparent; font-family: inherit; }
+  nav.tabs button.active { color: #ffd369; border-bottom-color: #ffd369; font-weight: bold; }
+
+  main { flex: 1; padding: 16px; padding-bottom: 40px; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* Library */
+  .story-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .story-card { background: #252542; border-radius: 14px; overflow: hidden; cursor: pointer; transition: transform .15s; }
+  .story-card:active { transform: scale(.97); }
+  .story-cover { height: 100px; display: flex; align-items: center; justify-content: center; font-size: 40px; }
+  .story-card .info { padding: 10px 12px 12px; }
+  .story-card .title { font-size: 15px; font-weight: bold; color: #fff; }
+  .story-card .meta { font-size: 11px; color: #8888a0; margin-top: 4px; }
+  .story-card .del { float: right; color: #666; font-size: 16px; padding: 2px 6px; }
+  .story-card .del:active { color: #e94560; }
+  .big-btn { margin-top: 16px; width: 100%; padding: 16px; background: linear-gradient(135deg, #e94560, #c73e5a); color: #fff; border: none; border-radius: 14px; font-size: 16px; font-weight: bold; cursor: pointer; font-family: inherit; }
+  .backup-row { display: flex; gap: 10px; margin-top: 12px; }
+  .backup-btn { flex: 1; background: #252542; border: 1px solid #3a3a5c; color: #aaa; border-radius: 12px; padding: 12px; font-size: 14px; cursor: pointer; font-family: inherit; }
+  .backup-btn:active { border-color: #ffd369; color: #ffd369; }
+  .backup-note { font-size: 11px; color: #555; text-align: center; margin-top: 8px; line-height: 1.8; }
+  .empty { text-align: center; padding: 60px 20px; color: #666; font-size: 14px; line-height: 2; }
+
+  /* Write */
+  .back-btn { background: none; border: none; color: #ffd369; font-size: 14px; cursor: pointer; padding: 4px 0 12px; font-family: inherit; }
+  .story-title-input { width: 100%; background: transparent; border: none; color: #ffd369; font-size: 20px; font-weight: bold; padding: 4px 0 12px; font-family: inherit; outline: none; }
+  .chap-bar { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 10px; }
+  .chap-chip { flex-shrink: 0; background: #252542; color: #ccc; border: none; border-radius: 20px; padding: 8px 14px; font-size: 13px; cursor: pointer; font-family: inherit; }
+  .chap-chip.active { background: #ffd369; color: #1a1a2e; font-weight: bold; }
+  .chap-chip.add { border: 1px dashed #555; background: transparent; color: #888; }
+  .write-area { width: 100%; background: #252542; border: none; border-radius: 12px; padding: 16px; min-height: 300px; font-size: 15px; line-height: 2; color: #ddd; font-family: inherit; resize: vertical; outline: none; }
+  .write-area:focus { outline: 2px solid #ffd36955; }
+  .chap-title-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .chap-title-row input { flex: 1; background: #252542; border: none; border-radius: 10px; padding: 10px 14px; color: #fff; font-size: 14px; font-family: inherit; outline: none; }
+  .icon-btn { background: #252542; border: none; border-radius: 10px; color: #888; padding: 10px 14px; font-size: 14px; cursor: pointer; font-family: inherit; }
+  .icon-btn:active { color: #e94560; }
+  .save-hint { font-size: 11px; color: #555; text-align: right; margin-top: 6px; }
+
+  /* Spark button */
+  .spark-wrap { margin-top: 14px; text-align: center; }
+  .spark-btn { background: none; border: 1px dashed #555; color: #8888a0; border-radius: 20px; padding: 8px 18px; font-size: 12px; cursor: pointer; font-family: inherit; }
+  .spark-btn:active { border-color: #ffd369; color: #ffd369; }
+  .spark-results { margin-top: 10px; display: none; }
+  .spark-results.show { display: block; }
+  .spark-item { background: #252542; border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; font-size: 13px; color: #ddd; line-height: 1.7; text-align: left; }
+  .spark-item .use { float: right; color: #ffd369; font-size: 12px; cursor: pointer; }
+  .spark-note { font-size: 11px; color: #555; margin-top: 8px; }
+
+  /* Characters */
+  .char-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .char-card { background: #252542; border-radius: 14px; padding: 16px 12px; text-align: center; position: relative; }
+  .char-avatar { width: 60px; height: 60px; border-radius: 50%; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; font-size: 28px; }
+  .char-card .name { font-size: 15px; font-weight: bold; color: #fff; }
+  .char-card .desc { font-size: 12px; color: #8888a0; margin-top: 6px; line-height: 1.6; }
+  .char-card .x { position: absolute; top: 6px; right: 10px; color: #555; font-size: 16px; cursor: pointer; }
+  .char-form { background: #252542; border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+  .char-form input, .char-form textarea { width: 100%; background: #1a1a2e; border: 1px solid #3a3a5c; border-radius: 8px; padding: 10px 12px; color: #eee; font-size: 14px; font-family: inherit; margin-bottom: 10px; outline: none; }
+  .char-form textarea { min-height: 60px; resize: vertical; }
+  .char-form button { width: 100%; padding: 12px; background: #ffd369; color: #1a1a2e; border: none; border-radius: 10px; font-size: 14px; font-weight: bold; cursor: pointer; font-family: inherit; }
+  .photo-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .photo-preview { width: 56px; height: 56px; border-radius: 50%; background: #1a1a2e; border: 1px dashed #555; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #666; overflow: hidden; flex-shrink: 0; }
+  .photo-preview img { width: 100%; height: 100%; object-fit: cover; }
+  .photo-btn { background: #1a1a2e; border: 1px solid #3a3a5c; color: #aaa; border-radius: 8px; padding: 10px 14px; font-size: 13px; cursor: pointer; font-family: inherit; }
+  .char-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+  .illus-heading { font-size: 13px; color: #8888a0; margin: 4px 0 12px; }
+  .illus-heading b { color: #ffd369; }
+
+  /* Illustrations */
+  .illus-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .illus-item { border-radius: 12px; overflow: hidden; position: relative; background: #252542; }
+  .illus-item img { width: 100%; height: 140px; object-fit: cover; display: block; }
+  .illus-item .cap { font-size: 11px; color: #8888a0; padding: 8px 10px; line-height: 1.5; }
+  .illus-item .x { position: absolute; top: 6px; right: 6px; background: #000a; color: #fff; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; }
+  .ai-box { background: #252542; border-radius: 14px; padding: 16px; }
+  .ai-box .label { font-size: 14px; color: #ffd369; font-weight: bold; margin-bottom: 10px; }
+  .ai-box input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #3a3a5c; background: #1a1a2e; color: #eee; font-size: 14px; font-family: inherit; outline: none; margin-bottom: 10px; box-sizing: border-box; }
+  .ai-box .gen-btn { width: 100%; padding: 14px; background: linear-gradient(135deg, #533483, #7b2ff7); color: #fff; border: none; border-radius: 10px; font-size: 15px; font-weight: bold; cursor: pointer; font-family: inherit; }
+  .ai-box .gen-btn:disabled { opacity: .5; }
+  .ai-note { margin-top: 10px; font-size: 11px; color: #8888a0; text-align: center; line-height: 1.8; }
+  .loading { text-align: center; padding: 20px; color: #8888a0; font-size: 13px; }
+
+  .story-picker { margin-bottom: 14px; }
+  .story-picker select { width: 100%; background: #252542; color: #ffd369; border: none; border-radius: 10px; padding: 12px; font-size: 15px; font-weight: bold; font-family: inherit; outline: none; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>故事工作室</h1>
+    <p>意念係你嘅，AI 淨係隻手 · v1.7</p>
+  </header>
+  <nav class="tabs">
+    <button class="active" data-tab="library">故事架</button>
+    <button data-tab="write">寫故事</button>
+    <button data-tab="chars">人物卡</button>
+    <button data-tab="illus">插圖</button>
+  </nav>
+  <main>
+    <section class="page active" id="page-library"></section>
+    <section class="page" id="page-write"></section>
+    <section class="page" id="page-chars"></section>
+    <section class="page" id="page-illus"></section>
+  </main>
+</div>
+
+<script>
+// ============ Data ============
+const KEY = 'storyStudioV1';
+let state = load() || { stories: [], activeStory: null, activeChapter: null };
+let activeTab = 'library';
+
+function load() { try { return JSON.parse(localStorage.getItem(KEY)); } catch(e) { return null; } }
+function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+const COVERS = [
+  'linear-gradient(135deg,#0f3460,#16537e)',
+  'linear-gradient(135deg,#1b2a4a,#2e5a88)',
+  'linear-gradient(135deg,#3a1c4a,#6a2c7a)',
+  'linear-gradient(135deg,#4a2c1a,#8a5a2e)',
+  'linear-gradient(135deg,#1a4a2e,#2e8a5a)',
+  'linear-gradient(135deg,#4a1a2e,#8a2e5a)'
+];
+const COVER_EMOJI = ['🐉','🌊','🚀','🏰','🌲','⚔️'];
+const AVATAR_BG = [
+  'linear-gradient(135deg,#e94560,#ff7b54)',
+  'linear-gradient(135deg,#0f3460,#16537e)',
+  'linear-gradient(135deg,#533483,#7b2ff7)',
+  'linear-gradient(135deg,#1a4a2e,#2e8a5a)',
+  'linear-gradient(135deg,#4a2c1a,#8a5a2e)',
+  'linear-gradient(135deg,#3a3a5c,#6a6a8c)'
+];
+const AVATAR_EMOJI = ['🦎','🧙','👦','🤖','🐱','👾'];
+
+// 靈感 spark 庫：撳先有，唔撳乜都冇
+const SPARKS = [
+  '如果主角最信任嘅人，原來一直收埋咗個秘密呢？',
+  '場大雨過後，成個地方變咗樣 — 多咗啲唔應該出現嘅嘢。',
+  '主角發現張地圖背後，仲有另一張地圖。',
+  '如果隻怪獸原來唔係敵人，只係好驚呢？',
+  '主角把武器突然間唔聽使喚，喺最唔啱嘅時候。',
+  '有個人自稱來自未來，話主角而家做緊嘅嘢會闖禍。',
+  '主角醒返，發現自己唔記得咗尋日發生過咩事。',
+  '條平時行開嘅路，今日多咗道唔應該有嘅門。',
+  '如果主角嘅影子突然有自己嘅諗法呢？',
+  '一個陌生人叫得出主角個名，但主角唔識佢。',
+  '主角發現自己寫低嘅嘢，第二日會變成真。',
+  '場戰鬥打到一半，對手突然停低，講咗句奇怪嘅說話。',
+  '主角要喺兩個朋友之間二揀一，冇得兩個都要。',
+  '如果時間突然停咗，得主角一個郁到呢？',
+  '主角一直以為係傳說嘅嘢，今日親眼見到。',
+  '有隻細路拖住主角隻手，話「跟我嚟，快啲」。',
+  '主角收到封冇署名嘅信，上面淨係寫咗個地點。',
+  '如果主角嘅力量每次用完，都會唔見咗一段記憶呢？',
+  '天上面出現咗第二個月亮，冇人知點解。',
+  '主角返到屋企，發現有個人坐咗喺佢個位。',
+  '場霧散開之後，前面條村唔見咗。',
+  '主角救返嚟嘅細動物，開口講咗嘢。',
+  '如果主角要假扮另一個人，先至入到嗰個地方呢？',
+  '主角本日記俾人睇過，仲有人喺入面留低咗回覆。',
+  '一直以嚟嘅敵人，突然向主角求救。',
+  '主角發咗個夢，夢入面嘅嘢逐樣喺現實出現。',
+  '如果主角講大話嗰陣，個鼻會發光呢？',
+  '有道聲喺主角個腦入面講嘢，得佢一個聽到。',
+  '主角發現自己個好朋友，原來係佢要搵嘅人。',
+  '場比賽最後一秒，發生咗冇人預計到嘅事。',
+  '如果主角許嘅願，真係會實現 — 但有代價呢？',
+  '主角跌咗落個窿，醒返發現自己細咗一半。',
+  '有個人同主角生得一模一樣，仲着住同一件衫。',
+  '主角要教識隻怪獸一樣嘢，先至過到下一關。',
+  '如果聽日就係世界末日，主角今晚會做咩？',
+  '主角一直帶喺身嘅嘢，原來係解開成件事嘅鎖匙。'
+];
+
+function getStory() { return state.stories.find(s => s.id === state.activeStory); }
+function esc(t) { const d = document.createElement('div'); d.textContent = t || ''; return d.innerHTML; }
+function fmtDate(ts) { const d = new Date(ts); return (d.getMonth()+1) + '/' + d.getDate(); }
+
+// ============ Tabs ============
+document.querySelectorAll('nav.tabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('page-' + btn.dataset.tab).classList.add('active');
+    activeTab = btn.dataset.tab;
+    render();
+  });
+});
+function goTab(name) {
+  document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  activeTab = name; render();
+}
+
+// ============ Library ============
+function renderLibrary() {
+  const el = document.getElementById('page-library');
+  if (!state.stories.length) {
+    el.innerHTML = '<div class="empty">仲未有故事<br>撳下面開你第一個故事啦！</div><button class="big-btn" onclick="newStory()">＋ 開新故事</button>'
+      + `<div class="backup-row">
+        <button class="backup-btn" onclick="document.getElementById('importFileEmpty').click()">📤 還原備份</button>
+        <input type="file" id="importFileEmpty" accept=".json,application/json" style="display:none" onchange="importData(this)">
+      </div>`;
+    return;
+  }
+  let html = '<div class="story-grid">';
+  state.stories.forEach((s, i) => {
+    const ch = s.chapters.length;
+    html += `<div class="story-card" onclick="openStory('${s.id}')">
+      <div class="story-cover" style="background:${COVERS[i % COVERS.length]}">${COVER_EMOJI[i % COVER_EMOJI.length]}</div>
+      <div class="info"><span class="del" onclick="event.stopPropagation();delStory('${s.id}')">×</span>
+      <div class="title">${esc(s.title)}</div><div class="meta">${ch} 章 · ${fmtDate(s.updatedAt)}更新</div></div></div>`;
+  });
+  html += '</div><button class="big-btn" onclick="newStory()">＋ 開新故事</button>';
+  html += `<div class="backup-row">
+    <button class="backup-btn" onclick="exportData()">📥 備份</button>
+    <button class="backup-btn" onclick="document.getElementById('importFile').click()">📤 還原</button>
+    <input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="importData(this)">
+  </div>
+  <div class="backup-note">備份會將所有故事下載成一個檔案<br>轉機或者清 browser 資料之前記得備份</div>`;
+  el.innerHTML = html;
+}
+// 備份：成個 state 下載做 JSON（export 前先將舊 remote 圖轉做 dataURL，確保齊圖）
+async function exportData() {
+  const btns = document.querySelectorAll('.backup-btn');
+  btns.forEach(b => { b.disabled = true; });
+  try {
+    const jobs = [];
+    for (const story of state.stories) {
+      for (const im of story.illustrations || []) {
+        if (im.url && im.url.startsWith('http')) {
+          jobs.push(
+            fetch(im.url).then(r => { if (!r.ok) throw 0; return r.blob(); }).then(blob => new Promise(res => {
+              const fr = new FileReader();
+              fr.onload = e => { im.url = e.target.result; res(); };
+              fr.onerror = () => res();
+              fr.readAsDataURL(blob);
+            })).catch(() => {})
+          );
+        }
+      }
+    }
+    if (jobs.length) {
+      await Promise.all(jobs);
+      try { save(); } catch (e) { alert('圖太多，localStorage 爆咗，部分舊圖轉唔到'); }
+      render();
+    }
+  } finally {
+    btns.forEach(b => { b.disabled = false; });
+  }
+  const blob = new Blob([JSON.stringify(state)], { type: 'application/json' });
+  const a = document.createElement('a');
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  a.href = URL.createObjectURL(blob);
+  a.download = `故事工作室-備份-${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+// 還原：讀 JSON 檔，驗證後覆寫
+function importData(input) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data || !Array.isArray(data.stories)) throw new Error('bad');
+      for (const s of data.stories) {
+        if (!s.id || !Array.isArray(s.chapters)) throw new Error('bad');
+      }
+      if (!confirm(`搵到 ${data.stories.length} 個故事。還原會覆寫而家全部內容，肯定？`)) { input.value = ''; return; }
+      state = data;
+      if (!getStory() && state.stories.length) state.activeStory = state.stories[0].id;
+      save(); render();
+      alert('還原完成！');
+    } catch (err) { alert('呢個唔係有效嘅備份檔'); }
+    input.value = '';
+  };
+  reader.readAsText(file);
+}
+function newStory() {
+  const s = { id: uid(), title: '未命名故事', chapters: [{ id: uid(), title: '第一章', content: '' }], characters: [], illustrations: [], updatedAt: Date.now() };
+  state.stories.unshift(s); state.activeStory = s.id; state.activeChapter = s.chapters[0].id;
+  save(); goTab('write');
+}
+function openStory(id) { state.activeStory = id; const s = getStory(); state.activeChapter = s.chapters[0] ? s.chapters[0].id : null; save(); goTab('write'); }
+function delStory(id) { if (!confirm('真係刪咗呢個故事？')) return; state.stories = state.stories.filter(s => s.id !== id); if (state.activeStory === id) state.activeStory = null; save(); render(); }
+function touchStory() { const s = getStory(); if (s) { s.updatedAt = Date.now(); save(); } }
+
+// ============ Write ============
+let saveTimer = null;
+function renderWrite() {
+  const el = document.getElementById('page-write');
+  const s = getStory();
+  if (!s) { el.innerHTML = '<div class="empty">去故事架揀個故事<br>或者開個新嘅先</div>'; return; }
+  const ch = s.chapters.find(c => c.id === state.activeChapter) || s.chapters[0];
+  let chips = s.chapters.map(c =>
+    `<button class="chap-chip ${c.id === (ch && ch.id) ? 'active' : ''}" onclick="switchChap('${c.id}')">${esc(c.title)}</button>`).join('');
+  chips += `<button class="chap-chip add" onclick="addChap()">＋</button>`;
+  el.innerHTML = `
+    <button class="back-btn" onclick="goTab('library')">‹ 返故事架</button>
+    <input class="story-title-input" value="${esc(s.title)}" oninput="renameStory(this.value)" placeholder="故事名">
+    <div class="chap-bar">${chips}</div>
+    ${ch ? `<div class="chap-title-row">
+      <input value="${esc(ch.title)}" oninput="renameChap('${ch.id}',this.value)" placeholder="章節名">
+      <button class="icon-btn" onclick="delChap('${ch.id}')">刪</button>
+    </div>
+    <textarea class="write-area" oninput="editChap('${ch.id}',this.value)" placeholder="喺呢度寫低你個故事…">${esc(ch.content)}</textarea>
+    <div class="save-hint" id="saveHint">自動儲存 ✓</div>` : ''}
+    <div class="spark-wrap">
+      <button class="spark-btn" onclick="showSparks()">💡 冇靈感？撳我</button>
+      <div class="spark-results" id="sparkResults"></div>
+      <div class="spark-note">唔撳就乜都唔會發生 · 用唔用都係你話事</div>
+    </div>`;
+}
+function renameStory(v) { const s = getStory(); s.title = v; touchStory(); }
+function switchChap(id) { state.activeChapter = id; save(); renderWrite(); }
+function addChap() { const s = getStory(); const c = { id: uid(), title: '第' + (s.chapters.length+1) + '章', content: '' }; s.chapters.push(c); state.activeChapter = c.id; touchStory(); renderWrite(); }
+function renameChap(id, v) { const s = getStory(); const c = s.chapters.find(x => x.id === id); c.title = v; touchStory(); }
+function delChap(id) { const s = getStory(); if (s.chapters.length <= 1) { alert('至少要留返一章'); return; } if (!confirm('刪咗呢章？')) return; s.chapters = s.chapters.filter(c => c.id !== id); state.activeChapter = s.chapters[0].id; touchStory(); renderWrite(); }
+function editChap(id, v) {
+  const s = getStory(); const c = s.chapters.find(x => x.id === id); c.content = v; touchStory();
+  clearTimeout(saveTimer);
+  const hint = document.getElementById('saveHint'); if (hint) hint.textContent = '打緊字…';
+  saveTimer = setTimeout(() => { const h = document.getElementById('saveHint'); if (h) h.textContent = '自動儲存 ✓'; }, 800);
+}
+async function showSparks() {
+  const box = document.getElementById('sparkResults');
+  box.innerHTML = '<div class="spark-item" style="color:#888">諗緊…等幾秒</div>';
+  box.classList.add('show');
+  const s = getStory();
+  const ai = await fetchAISparks(s);
+  // AI 唔得就跌返落 static 庫
+  const picks = ai.length ? ai : [...buildContextSparks(s), ...SPARKS].sort(() => Math.random() - .5).slice(0, 3);
+  box.innerHTML = picks.map(p => `<div class="spark-item">${esc(p)}</div>`).join('')
+    + (ai.length ? '' : '<div class="spark-note">（AI 忙緊，呢啲係預寫嘅靈感）</div>');
+}
+// 真 AI：將故事 context 送去 LLM，即場諗靈感
+async function fetchAISparks(s) {
+  try {
+    const names = s ? s.characters.map(c => c.name + (c.desc ? '（' + c.desc.slice(0, 30) + '）' : '')).join('；') : '';
+    const ch = s ? s.chapters.find(c => c.id === state.activeChapter) : null;
+    const excerpt = ch && ch.content ? ch.content.slice(-200) : '';
+    const parts = ['你係幫12歲小朋友寫故事嘅靈感助手，只用繁體中文回覆。'];
+    if (s && s.title && s.title !== '未命名故事') parts.push('故事名：《' + s.title + '》');
+    if (names) parts.push('人物：' + names);
+    if (ch) parts.push('寫緊：' + ch.title);
+    if (excerpt) parts.push('近排寫咗：' + excerpt);
+    parts.push('畀3個簡短故事靈感，每個一至兩句，只係方向唔好寫成段故仔。每行一個，唔加編號，唔加解釋。');
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 25000);
+    const res = await fetch('https://text.pollinations.ai/' + encodeURIComponent(parts.join('\n')), { signal: ctrl.signal });
+    clearTimeout(t);
+    if (!res.ok) return [];
+    const text = await res.text();
+    return text.split('\n').map(l => l.replace(/^[\d\.\、\:\-\*\s]+/, '').trim()).filter(l => l.length > 8 && l.length < 150).slice(0, 3);
+  } catch (e) { return []; }
+}
+// 根據已寫嘅內容（人物名、故事名、章節）砌返相關嘅靈感
+function buildContextSparks(s) {
+  if (!s) return [];
+  const out = [];
+  const names = s.characters.map(c => c.name).filter(n => n && n.trim());
+  const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+  if (names.length >= 1) {
+    const n = pick(names);
+    out.push(
+      `如果${n}突然唔見咗，會發生咩事？`,
+      `${n}一直收埋咗個秘密，今日俾人發現咗。`,
+      `有個陌生人自稱識${n}，但${n}話唔識佢。`,
+      `${n}最驚嘅嘢，今日偏偏出現喺面前。`
+    );
+  }
+  if (names.length >= 2) {
+    const a = names[0], b = names[1 % names.length];
+    out.push(
+      `${a}同${b}為咗一件事嗌起交來。`,
+      `${a}要喺${b}同另一個朋友之間二揀一。`
+    );
+  }
+  if (s.title && s.title !== '未命名故事') {
+    out.push(`喺《${s.title}》入面從來冇出現過嘅地方，今日有人去到。`);
+  }
+  const ch = s.chapters.find(c => c.id === state.activeChapter);
+  if (ch && ch.content && ch.content.trim().length > 30) {
+    out.push(
+      `頭先寫嗰段，如果結局完全反轉會點？`,
+      `將頭先嗰段入面最唔起眼嘅細節，變成下一章嘅關鍵。`
+    );
+  }
+  if (ch && ch.title && !/^第.+章$/.test(ch.title) && ch.title !== '第一章') {
+    out.push(`「${ch.title}」呢個名本身 — 會唔會係一個伏線？`);
+  }
+  return out;
+}
+
+// ============ Characters ============
+function storyPickerHTML() {
+  const s = getStory();
+  if (!s) return '';
+  const opts = state.stories.map(x => `<option value="${x.id}" ${x.id === s.id ? 'selected' : ''}>${esc(x.title)}</option>`).join('');
+  return `<div class="story-picker"><select onchange="state.activeStory=this.value;save();render();">${opts}</select></div>`;
+}
+function renderChars() {
+  const el = document.getElementById('page-chars');
+  const s = getStory();
+  if (!s) { el.innerHTML = '<div class="empty">去故事架揀個故事先</div>'; return; }
+  let html = storyPickerHTML();
+  html += `<div class="char-form">
+    <div class="photo-row">
+      <div class="photo-preview" id="photoPreview">＋</div>
+      <button class="photo-btn" onclick="document.getElementById('ncPhoto').click()">上載相片</button>
+      <input type="file" id="ncPhoto" accept="image/*" style="display:none" onchange="previewPhoto(this)">
+    </div>
+    <input id="ncName" placeholder="人物名，例如：赤甲獸">
+    <textarea id="ncDesc" placeholder="佢係點嘅人？例如：主角嘅拍檔，怕黑，鍾意食石頭"></textarea>
+    <button onclick="addChar()">加入人物卡</button></div><div class="char-grid">`;
+  s.characters.forEach((c, i) => {
+    const avatar = c.photo
+      ? `<div class="char-avatar"><img src="${c.photo}" alt=""></div>`
+      : `<div class="char-avatar" style="background:${AVATAR_BG[i % AVATAR_BG.length]}">${AVATAR_EMOJI[i % AVATAR_EMOJI.length]}</div>`;
+    html += `<div class="char-card"><span class="x" onclick="delChar('${c.id}')">×</span>
+      ${avatar}
+      <div class="name">${esc(c.name)}</div><div class="desc">${esc(c.desc).replace(/\n/g,'<br>')}</div>
+      <div style="margin-top:8px"><button class="photo-btn" style="padding:6px 16px;font-size:12px" onclick="editChar('${c.id}')">改</button></div></div>`;
+  });
+  html += '</div>';
+  el.innerHTML = html;
+  // 如果啱啱撳咗改，填返個 form
+  if (editingChar) {
+    const s2 = getStory(); const c = s2.characters.find(x => x.id === editingChar);
+    if (c) {
+      document.getElementById('ncName').value = c.name;
+      document.getElementById('ncDesc').value = c.desc || '';
+      if (c.photo) { pendingPhoto = c.photo; document.getElementById('photoPreview').innerHTML = `<img src="${c.photo}">`; }
+      const btns = document.querySelectorAll('.char-form button');
+      btns[btns.length - 1].textContent = '儲存修改';
+      btns[btns.length - 1].setAttribute('onclick', 'saveCharEdit()');
+    }
+  }
+}
+let editingChar = null;
+let pendingPhoto = null;
+function previewPhoto(input) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      // 壓縮到 300px，慳 localStorage 位
+      const max = 300;
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * scale); cv.height = Math.round(img.height * scale);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      pendingPhoto = cv.toDataURL('image/jpeg', 0.7);
+      document.getElementById('photoPreview').innerHTML = `<img src="${pendingPhoto}">`;
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+function addChar() {
+  const s = getStory(); if (!s) return;
+  const name = document.getElementById('ncName').value.trim();
+  const desc = document.getElementById('ncDesc').value.trim();
+  if (!name) { alert('畀個人物名先'); return; }
+  s.characters.push({ id: uid(), name, desc, photo: pendingPhoto });
+  pendingPhoto = null; touchStory(); renderChars();
+}
+function editChar(id) { editingChar = id; pendingPhoto = null; renderChars(); window.scrollTo(0, 0); }
+function saveCharEdit() {
+  const s = getStory(); if (!s || !editingChar) return;
+  const c = s.characters.find(x => x.id === editingChar); if (!c) return;
+  const name = document.getElementById('ncName').value.trim();
+  if (!name) { alert('畀個人物名先'); return; }
+  c.name = name;
+  c.desc = document.getElementById('ncDesc').value.trim();
+  if (pendingPhoto) c.photo = pendingPhoto;
+  editingChar = null; pendingPhoto = null; touchStory(); renderChars();
+}
+function delChar(id) {
+  const s = getStory(); const c = s.characters.find(x => x.id === id);
+  if (!confirm(`真係刪咗「${c ? c.name : ''}」呢張人物卡？`)) return;
+  s.characters = s.characters.filter(x => x.id !== id); touchStory(); renderChars();
+}
+
+// ============ Illustrations ============
+function renderIllus() {
+  const el = document.getElementById('page-illus');
+  const s = getStory();
+  if (!s) { el.innerHTML = '<div class="empty">去故事架揀個故事先</div>'; return; }
+  let html = storyPickerHTML();
+  html += `<div class="illus-heading">以下係 <b>《${esc(s.title)}》</b> 嘅插圖，每個故事有自己嘅插圖庫</div>`;
+  html += '<div class="illus-grid" id="illusGrid">';
+  [...s.illustrations].reverse().forEach(im => {
+    html += `<div class="illus-item"><span class="x" onclick="delIllus('${im.id}')">×</span>
+      <img src="${im.url}" loading="lazy" alt=""><div class="cap">${esc(im.prompt)}</div></div>`;
+  });
+  html += '</div>';
+  if (!s.illustrations.length) html += '<div class="empty" style="padding:20px">未有插圖，喺下面形容你想畫嘅嘢</div>';
+  html += `<div class="ai-box">
+    <div class="label">✦ AI 幫你畫出嚟</div>
+    <input id="illusPrompt" placeholder="形容你想畫嘅嘢，例如：識飛嘅石頭怪獸">
+    <button class="gen-btn" id="genBtn" onclick="genIllus()">畫出嚟！</button>
+    <div class="ai-note">故事同意念全部係你嘅<br>AI 淨係負責畫，唔會幫你諗</div>
+    <div class="loading" id="illusLoading" style="display:none">🎨 畫緊…通常要等 10–30 秒，唔好閂</div>
+  </div>`;
+  el.innerHTML = html;
+}
+let lastGenTime = 0;
+try { lastGenTime = parseInt(localStorage.getItem(KEY + '_lastGen') || '0', 10) || 0; } catch (e) {}
+const GEN_COOLDOWN = 50000; // 免費版 45 秒一張，留返啲 buffer
+// 檢測係咪 Pollinations 回嘅錯誤圖（純色底+黑字，得幾隻色；真圖有幾十隻色以上）
+function isErrorImage(img) {
+  return new Promise(resolve => {
+    try {
+      const cv = document.createElement('canvas');
+      cv.width = 48; cv.height = 48;
+      const ctx = cv.getContext('2d');
+      ctx.drawImage(img, 0, 0, 48, 48);
+      const d = ctx.getImageData(0, 0, 48, 48).data;
+      const colors = new Set();
+      for (let i = 0; i < d.length; i += 16) {
+        const key = Math.round(d[i]/32)*32 + ',' + Math.round(d[i+1]/32)*32 + ',' + Math.round(d[i+2]/32)*32;
+        colors.add(key);
+        if (colors.size > 30) break;
+      }
+      resolve(colors.size <= 12);
+    } catch(e){ resolve(false); }
+  });
+}
+async function genIllus() {
+  const s = getStory(); if (!s) return;
+  const wait = GEN_COOLDOWN - (Date.now() - lastGenTime);
+  if (wait > 0) { alert(`免費版 45 秒先畫到一張，等多 ${Math.ceil(wait/1000)} 秒再試`); return; }
+  const input = document.getElementById('illusPrompt');
+  const prompt = input.value.trim();
+  if (!prompt) { alert('形容下你想畫咩先'); return; }
+  const btn = document.getElementById('genBtn'); const loading = document.getElementById('illusLoading');
+  btn.disabled = true; btn.textContent = '畫緊…'; loading.style.display = 'block';
+  let done = false;
+  const reset = () => { btn.disabled = false; btn.textContent = '畫出嚟！'; loading.style.display = 'none'; };
+  const fail = msg => { if (done) return; done = true; alert(msg); reset(); };
+  try {
+    // 包裝 prompt：指明係兒童故事插圖，冇咁易觸發 content filter，風格亦統一啲
+    const enhanced = '兒童故事書插圖：' + prompt + '，色彩豐富，細節精美，溫暖奇幻風格';
+    const url = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(enhanced) + '?width=768&height=768&nologo=true&seed=' + Date.now();
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 90000);
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(t);
+    const ct = res.headers.get('content-type') || '';
+    // API 回 JSON 即係出錯（rate limit / 被擋），唔係圖
+    if (ct.includes('application/json')) {
+      let secs = 45;
+      try {
+        const err = await res.json();
+        const m = (err?.error?.message || '').match(/retry after (\d+)s/i);
+        if (m) secs = parseInt(m[1], 10);
+      } catch (e) {}
+      // 記住個 cooldown，下次唔使再撞牆
+      lastGenTime = Date.now() - GEN_COOLDOWN + secs * 1000;
+      fail(`畫得太密喇，等 ${secs} 秒再試`);
+      return;
+    }
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = async () => {
+      if (done) return;
+      // 第二重防線：萬一係 render 出嚟嘅 error 圖（純色+字）
+      if (await isErrorImage(img)) { URL.revokeObjectURL(blobUrl); fail('張圖俾擋咗，等陣再試，或者寫具體啲'); return; }
+      done = true;
+      lastGenTime = Date.now();
+      try { localStorage.setItem(KEY + '_lastGen', String(lastGenTime)); } catch (e) {}
+      // 存 blob 轉做 dataURL，等 gallery 唔使再問 server 攞
+      const fr = new FileReader();
+      fr.onload = e => {
+        s.illustrations.push({ id: uid(), prompt, url: e.target.result, created: Date.now() });
+        touchStory(); renderIllus();
+      };
+      fr.readAsDataURL(blob);
+      URL.revokeObjectURL(blobUrl);
+    };
+    img.onerror = () => { URL.revokeObjectURL(blobUrl); fail('張圖load唔到，試多次'); };
+    img.src = blobUrl;
+  } catch (e) { fail('網絡有問題，試多次'); }
+}
+function delIllus(id) {
+  if (!confirm('真係刪咗呢張插圖？')) return;
+  const s = getStory(); s.illustrations = s.illustrations.filter(i => i.id !== id); touchStory(); renderIllus();
+}
+
+// ============ Render ============
+function render() {
+  if (activeTab === 'library') renderLibrary();
+  else if (activeTab === 'write') renderWrite();
+  else if (activeTab === 'chars') renderChars();
+  else if (activeTab === 'illus') renderIllus();
+}
+render();
+
+// ============ PWA: service worker ============
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
