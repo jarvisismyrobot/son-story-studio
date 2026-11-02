@@ -41,6 +41,7 @@
   .card-btn { flex: 1; background: #1a1a2e; border: 1px solid #3a3a5c; color: #aaa; border-radius: 8px; padding: 9px 4px; font-size: 12px; cursor: pointer; font-family: inherit; }
   .card-btn:active { border-color: #ffd369; color: #ffd369; }
   .card-btn.danger { color: #e94560; border-color: #e9456044; }
+  .card-btn.icon-only { flex: 0 0 50px; font-size: 16px; }
   .card-btn.danger:active { border-color: #e94560; color: #e94560; }
   .card-btn.pressing {
     background: linear-gradient(90deg, rgba(233,69,96,.35) var(--p,0%), rgba(233,69,96,.08) var(--p,0%));
@@ -76,7 +77,6 @@
   .spark-results { margin-top: 10px; display: none; }
   .spark-results.show { display: block; }
   .spark-item { background: #252542; border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; font-size: 13px; color: #ddd; line-height: 1.7; text-align: left; }
-  .spark-item .use { float: right; color: #ffd369; font-size: 12px; cursor: pointer; }
   .spark-note { font-size: 11px; color: #555; margin-top: 8px; }
 
   /* Characters */
@@ -104,7 +104,7 @@
 <div id="app">
   <header>
     <h1>故事工作室</h1>
-    <p>意念係你嘅，AI 淨係隻手 · v1.20</p>
+    <p>意念係你嘅，AI 淨係隻手 · v1.21</p>
   </header>
   <nav class="tabs">
     <button class="active" data-tab="library">故事架</button>
@@ -154,11 +154,12 @@ const COVERS = [
 const COVER_EMOJI = ['🐉','🌊','🚀','🏰','🌲','⚔️','🐯','🤖','👻','🌙','⭐','🔥','🌈','🏝️','🐙','🦄','🐺','🍄','⚡️','🌪️','❄️','🌋','👑','💎'];
 // 封面選擇器
 const coverPickerCSS = `
-.cover-picker-ov { position: fixed; inset: 0; background: #000a; z-index: 50; display: flex; align-items: center; justify-content: center; }
-.cover-picker { background: #252542; border-radius: 16px; padding: 18px; display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; max-width: 340px; }
-.cover-picker button { background: none; border: none; font-size: 30px; padding: 8px; cursor: pointer; border-radius: 10px; }
-.cover-picker button:active { background: #ffd36933; }
-.cover-upload { font-size: 13px !important; color: #ffd369; border: 1px dashed #ffd36966 !important; grid-column: span 6; padding: 12px !important; }
+.cover-picker-ov { position: fixed; inset: 0; background: #000a; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.cover-picker { background: #252542; border-radius: 16px; padding: 18px; max-width: 340px; width: 100%; }
+.cover-upload { display: block; width: 100%; font-size: 13px; color: #ffd369; border: 1px dashed #ffd36966; border-radius: 10px; padding: 12px; margin-bottom: 12px; background: none; cursor: pointer; font-family: inherit; }
+.cover-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.cover-grid button { background: none; border: none; font-size: 28px; cursor: pointer; border-radius: 10px; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; padding: 0; }
+.cover-grid button:active { background: #ffd36933; }
 .story-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }`;
 function storyCover(s, i) { return (s && s.cover) || COVER_EMOJI[i % 6]; }
 function pickCover(id) {
@@ -169,7 +170,7 @@ function pickCover(id) {
   ov.id = 'coverPicker'; ov.className = 'cover-picker-ov';
   ov.innerHTML = '<div class="cover-picker">'
     + `<button class="cover-upload" onclick="document.getElementById('coverFile').click()">📤 上載圖片做封面</button>`
-    + COVER_EMOJI.map(e => `<button onclick="setCover('${id}','${e}')">${e}</button>`).join('')
+    + '<div class="cover-grid">' + COVER_EMOJI.map(e => `<button onclick="setCover('${id}','${e}')">${e}</button>`).join('') + '</div>'
     + '</div>'
     + `<input type="file" id="coverFile" accept="image/*" style="display:none" onchange="uploadCover('${id}',this)">`;
   ov.onclick = e => { if (e.target === ov) closeCoverPicker(); };
@@ -215,46 +216,6 @@ const AVATAR_BG = [
   'linear-gradient(135deg,#3a3a5c,#6a6a8c)'
 ];
 const AVATAR_EMOJI = ['🦎','🧙','👦','🤖','🐱','👾'];
-
-// 靈感 spark 庫：撳先有，唔撳乜都冇
-const SPARKS = [
-  '如果主角最信任嘅人，原來一直收埋咗個秘密呢？',
-  '場大雨過後，成個地方變咗樣 — 多咗啲唔應該出現嘅嘢。',
-  '主角發現張地圖背後，仲有另一張地圖。',
-  '如果隻怪獸原來唔係敵人，只係好驚呢？',
-  '主角把武器突然間唔聽使喚，喺最唔啱嘅時候。',
-  '有個人自稱來自未來，話主角而家做緊嘅嘢會闖禍。',
-  '主角醒返，發現自己唔記得咗尋日發生過咩事。',
-  '條平時行開嘅路，今日多咗道唔應該有嘅門。',
-  '如果主角嘅影子突然有自己嘅諗法呢？',
-  '一個陌生人叫得出主角個名，但主角唔識佢。',
-  '主角發現自己寫低嘅嘢，第二日會變成真。',
-  '場戰鬥打到一半，對手突然停低，講咗句奇怪嘅說話。',
-  '主角要喺兩個朋友之間二揀一，冇得兩個都要。',
-  '如果時間突然停咗，得主角一個郁到呢？',
-  '主角一直以為係傳說嘅嘢，今日親眼見到。',
-  '有隻細路拖住主角隻手，話「跟我嚟，快啲」。',
-  '主角收到封冇署名嘅信，上面淨係寫咗個地點。',
-  '如果主角嘅力量每次用完，都會唔見咗一段記憶呢？',
-  '天上面出現咗第二個月亮，冇人知點解。',
-  '主角返到屋企，發現有個人坐咗喺佢個位。',
-  '場霧散開之後，前面條村唔見咗。',
-  '主角救返嚟嘅細動物，開口講咗嘢。',
-  '如果主角要假扮另一個人，先至入到嗰個地方呢？',
-  '主角本日記俾人睇過，仲有人喺入面留低咗回覆。',
-  '一直以嚟嘅敵人，突然向主角求救。',
-  '主角發咗個夢，夢入面嘅嘢逐樣喺現實出現。',
-  '如果主角講大話嗰陣，個鼻會發光呢？',
-  '有道聲喺主角個腦入面講嘢，得佢一個聽到。',
-  '主角發現自己個好朋友，原來係佢要搵嘅人。',
-  '場比賽最後一秒，發生咗冇人預計到嘅事。',
-  '如果主角許嘅願，真係會實現 — 但有代價呢？',
-  '主角跌咗落個窿，醒返發現自己細咗一半。',
-  '有個人同主角生得一模一樣，仲着住同一件衫。',
-  '主角要教識隻怪獸一樣嘢，先至過到下一關。',
-  '如果聽日就係世界末日，主角今晚會做咩？',
-  '主角一直帶喺身嘅嘢，原來係解開成件事嘅鎖匙。'
-];
 
 function getStory() { return state.stories.find(s => s.id === state.activeStory); }
 function esc(t) { const d = document.createElement('div'); d.textContent = t || ''; return d.innerHTML; }
@@ -334,9 +295,9 @@ function renderLibrary() {
       <div class="story-cover" style="background:${COVERS[i % COVERS.length]}">${coverHTML(s, i)}</div>
       <div class="info">
       <div class="title">${esc(s.title)}</div><div class="meta">${ch} 章 · ${fmtDate(s.updatedAt)}更新</div>
-      <div class="card-actions">
+      <div class="card-actions" id="ca-${s.id}">
         <button class="card-btn" onclick="event.stopPropagation();pickCover('${s.id}')">🎨 轉封面</button>
-        <button class="card-btn danger" onclick="event.stopPropagation()" onpointerdown="pressDelStart('${s.id}',this,event)" onpointerup="pressDelEnd()" onpointercancel="pressDelEnd()" onpointerleave="pressDelEnd()" oncontextmenu="return false">🗑 長㩒刪除</button>
+        <button class="card-btn icon-only" onclick="event.stopPropagation();askDelStory('${s.id}')" title="刪除">🗑</button>
       </div></div></div>`;
   });
   html += '</div><button class="big-btn" onclick="newStory()">＋ 開新故事</button>';
@@ -421,28 +382,41 @@ function delStory(id) {
   if (state.activeStory === id) state.activeStory = null;
   save(); render();
 }
-// 長㩒刪除：㩒住 1.5 秒先刪，掂一下唔會有事
+// 刪除兩步：撳 🗑 → 出「取消 / 長㩒10秒刪除」
+function askDelStory(id) {
+  renderLibrary(); // 先還原晒其他卡
+  const row = document.getElementById('ca-' + id);
+  if (!row) return;
+  row.innerHTML =
+    `<button class="card-btn" onclick="event.stopPropagation();renderLibrary()">取消</button>` +
+    `<button class="card-btn danger" onclick="event.stopPropagation()" onpointerdown="pressDelStart('${id}',this,event)" onpointerup="pressDelEnd()" onpointercancel="pressDelEnd()" onpointerleave="pressDelEnd()" oncontextmenu="return false">🗑 長㩒10秒刪除</button>`;
+}
+// 長㩒刪除：㩒住唔放先刪，掂一下唔會有事
 let pressTimer = null, pressTarget = null;
-const PRESS_MS = 1500;
+const PRESS_MS = 10000;
 function pressDelStart(id, btn, ev) {
   if (ev.cancelable) ev.preventDefault();
   try { btn.setPointerCapture(ev.pointerId); } catch (e) {}
   pressDelEnd();
   pressTarget = btn;
+  if (!btn.dataset.label) btn.dataset.label = btn.textContent;
   btn.classList.add('pressing');
   btn.style.setProperty('--p', '0%');
   const t0 = Date.now();
   pressTimer = setInterval(() => {
-    const p = Math.min(1, (Date.now() - t0) / PRESS_MS);
+    const remain = PRESS_MS - (Date.now() - t0);
+    const p = Math.min(1, 1 - remain / PRESS_MS);
     btn.style.setProperty('--p', (p * 100).toFixed(0) + '%');
-    if (p >= 1) { pressDelEnd(); delStory(id); }
-  }, 50);
+    btn.textContent = '🗑 仲有 ' + Math.max(1, Math.ceil(remain / 1000)) + ' 秒';
+    if (remain <= 0) { pressDelEnd(); delStory(id); }
+  }, 100);
 }
 function pressDelEnd() {
   if (pressTimer) { clearInterval(pressTimer); pressTimer = null; }
   if (pressTarget) {
     pressTarget.classList.remove('pressing');
     pressTarget.style.setProperty('--p', '0%');
+    if (pressTarget.dataset.label) pressTarget.textContent = pressTarget.dataset.label;
     pressTarget = null;
   }
 }
@@ -568,43 +542,6 @@ async function fetchAISparks(s) {
   } catch (e) { return { sparks: [], reason: e && e.name === 'AbortError' ? 'timeout' : 'network' }; }
 }
 // 根據已寫嘅內容（人物名、故事名、章節）砌返相關嘅靈感
-function buildContextSparks(s) {
-  if (!s) return [];
-  const out = [];
-  const names = s.characters.map(c => c.name).filter(n => n && n.trim());
-  const pick = arr => arr[Math.floor(Math.random() * arr.length)];
-  if (names.length >= 1) {
-    const n = pick(names);
-    out.push(
-      `如果${n}突然唔見咗，會發生咩事？`,
-      `${n}一直收埋咗個秘密，今日俾人發現咗。`,
-      `有個陌生人自稱識${n}，但${n}話唔識佢。`,
-      `${n}最驚嘅嘢，今日偏偏出現喺面前。`
-    );
-  }
-  if (names.length >= 2) {
-    const a = names[0], b = names[1 % names.length];
-    out.push(
-      `${a}同${b}為咗一件事嗌起交來。`,
-      `${a}要喺${b}同另一個朋友之間二揀一。`
-    );
-  }
-  if (s.title && s.title !== '未命名故事') {
-    out.push(`喺《${s.title}》入面從來冇出現過嘅地方，今日有人去到。`);
-  }
-  const ch = s.chapters.find(c => c.id === state.activeChapter);
-  if (ch && ch.content && ch.content.trim().length > 30) {
-    out.push(
-      `頭先寫嗰段，如果結局完全反轉會點？`,
-      `將頭先嗰段入面最唔起眼嘅細節，變成下一章嘅關鍵。`
-    );
-  }
-  if (ch && ch.title && !/^第.+章$/.test(ch.title) && ch.title !== '第一章') {
-    out.push(`「${ch.title}」呢個名本身 — 會唔會係一個伏線？`);
-  }
-  return out;
-}
-
 // ============ Characters ============
 function storyPickerHTML() {
   const s = getStory();
