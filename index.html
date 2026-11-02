@@ -96,7 +96,7 @@
 <div id="app">
   <header>
     <h1>故事工作室</h1>
-    <p>意念係你嘅，AI 淨係隻手 · v1.16</p>
+    <p>意念係你嘅，AI 淨係隻手 · v1.17</p>
   </header>
   <nav class="tabs">
     <button class="active" data-tab="library">故事架</button>
@@ -117,7 +117,22 @@ let state = load() || { stories: [], activeStory: null, activeChapter: null };
 let activeTab = 'library';
 
 function load() { try { return JSON.parse(localStorage.getItem(KEY)); } catch(e) { return null; } }
-function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(state)); return true; }
+  catch (e) {
+    const full = e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014);
+    if (full && Date.now() - quotaWarned > 60000) {
+      quotaWarned = Date.now();
+      alert('儲存空間爆咗！去故事架撳「備份」下載咗先，再刪啲唔要嘅相或者封面。');
+    }
+    return false;
+  }
+}
+let quotaWarned = 0;
+function storageMB() {
+  try { return ((localStorage.getItem(KEY) || '').length / 1048576).toFixed(1); }
+  catch (e) { return '?'; }
+}
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 
 const COVERS = [
@@ -318,7 +333,7 @@ function renderLibrary() {
     <button class="backup-btn" onclick="document.getElementById('importFile').click()">📤 還原</button>
     <input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="importData(this)">
   </div>
-  <div class="backup-note">備份會將所有故事下載成一個檔案<br>轉機或者清 browser 資料之前記得備份</div>
+  <div class="backup-note">備份會將所有故事下載成一個檔案<br>轉機或者清 browser 資料之前記得備份<br>已用 ${storageMB()} MB（上限約 5MB）</div>
   <div class="backup-row" style="margin-top:10px">
     <button class="backup-btn" onclick="checkUpdate()">🔄 檢查更新</button>
   </div>
