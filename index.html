@@ -96,7 +96,7 @@
 <div id="app">
   <header>
     <h1>故事工作室</h1>
-    <p>意念係你嘅，AI 淨係隻手 · v1.13</p>
+    <p>意念係你嘅，AI 淨係隻手 · v1.14</p>
   </header>
   <nav class="tabs">
     <button class="active" data-tab="library">故事架</button>
@@ -128,7 +128,33 @@ const COVERS = [
   'linear-gradient(135deg,#1a4a2e,#2e8a5a)',
   'linear-gradient(135deg,#4a1a2e,#8a2e5a)'
 ];
-const COVER_EMOJI = ['🐉','🌊','🚀','🏰','🌲','⚔️'];
+const COVER_EMOJI = ['🐉','🌊','🚀','🏰','🌲','⚔️','🐯','🤖','👻','🌙','⭐','🔥','🌈','🏝️','🐙','🦄','🐺','🍄','⚡️','🌪️','❄️','🌋','👑','💎'];
+// 封面選擇器
+const coverPickerCSS = `
+.cover-picker-ov { position: fixed; inset: 0; background: #000a; z-index: 50; display: flex; align-items: center; justify-content: center; }
+.cover-picker { background: #252542; border-radius: 16px; padding: 18px; display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; max-width: 340px; }
+.cover-picker button { background: none; border: none; font-size: 30px; padding: 8px; cursor: pointer; border-radius: 10px; }
+.cover-picker button:active { background: #ffd36933; }`;
+function storyCover(s, i) { return (s && s.cover) || COVER_EMOJI[i % 6]; }
+function pickCover(id) {
+  closeCoverPicker();
+  const st = document.createElement('style'); st.id = 'coverPickerCSS'; st.textContent = coverPickerCSS;
+  document.head.appendChild(st);
+  const ov = document.createElement('div');
+  ov.id = 'coverPicker'; ov.className = 'cover-picker-ov';
+  ov.innerHTML = '<div class="cover-picker">' + COVER_EMOJI.map(e => `<button onclick="setCover('${id}','${e}')">${e}</button>`).join('') + '</div>';
+  ov.onclick = e => { if (e.target === ov) closeCoverPicker(); };
+  document.body.appendChild(ov);
+}
+function closeCoverPicker() {
+  const ov = document.getElementById('coverPicker'); if (ov) ov.remove();
+  const st = document.getElementById('coverPickerCSS'); if (st) st.remove();
+}
+function setCover(id, emoji) {
+  const s = state.stories.find(x => x.id === id);
+  if (s) { s.cover = emoji; s.updatedAt = Date.now(); save(); }
+  closeCoverPicker(); renderLibrary();
+}
 const AVATAR_BG = [
   'linear-gradient(135deg,#e94560,#ff7b54)',
   'linear-gradient(135deg,#0f3460,#16537e)',
@@ -183,6 +209,43 @@ function getStory() { return state.stories.find(s => s.id === state.activeStory)
 function esc(t) { const d = document.createElement('div'); d.textContent = t || ''; return d.innerHTML; }
 function fmtDate(ts) { const d = new Date(ts); return (d.getMonth()+1) + '/' + d.getDate(); }
 
+// ============ 朗讀 ============
+let reading = false;
+function guessLang(text) {
+  const t = text || '';
+  const en = t.replace(/[^A-Za-z]/g, '').length;
+  const zh = t.replace(/[^一-鿿]/g, '').length;
+  return en > zh * 2 ? 'en' : 'zh';
+}
+function stopRead() {
+  reading = false;
+  try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) {}
+  const b = document.getElementById('readBtn');
+  if (b) b.textContent = '🔊 朗讀';
+}
+function toggleRead() {
+  if (!('speechSynthesis' in window)) { alert('呢部機唔支援朗讀'); return; }
+  if (reading) { stopRead(); return; }
+  const s = getStory();
+  const ch = s ? (s.chapters.find(c => c.id === state.activeChapter) || s.chapters[0]) : null;
+  const text = ((ch && ch.title ? ch.title + '。' : '') + (ch && ch.content ? ch.content : '')).trim();
+  if (!text) { alert('寫咗嘢先讀到喎'); return; }
+  const lang = guessLang(text);
+  const u = new SpeechSynthesisUtterance(text);
+  const vs = speechSynthesis.getVoices();
+  const v = vs.find(x => x.lang && x.lang.toLowerCase().startsWith(lang === 'en' ? 'en' : 'zh')) || null;
+  if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = lang === 'en' ? 'en-US' : 'zh-HK'; }
+  u.rate = 0.95;
+  u.onend = u.onerror = () => stopRead();
+  speechSynthesis.cancel();
+  speechSynthesis.speak(u);
+  reading = true;
+  const b = document.getElementById('readBtn');
+  if (b) b.textContent = '⏹ 停';
+}
+// 暖一暖 voices（有啲機第一次係空嘅）
+try { if ('speechSynthesis' in window) { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices(); } } catch (e) {}
+
 // ============ Tabs ============
 document.querySelectorAll('nav.tabs button').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -195,6 +258,7 @@ document.querySelectorAll('nav.tabs button').forEach(btn => {
   });
 });
 function goTab(name) {
+  stopRead();
   document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
@@ -216,7 +280,7 @@ function renderLibrary() {
   state.stories.forEach((s, i) => {
     const ch = s.chapters.length;
     html += `<div class="story-card" onclick="openStory('${s.id}')">
-      <div class="story-cover" style="background:${COVERS[i % COVERS.length]}">${COVER_EMOJI[i % COVER_EMOJI.length]}</div>
+      <div class="story-cover" style="background:${COVERS[i % COVERS.length]}" onclick="event.stopPropagation();pickCover('${s.id}')" title="撳嚟轉封面">${storyCover(s, i)}</div>
       <div class="info"><span class="del" onclick="event.stopPropagation();delStory('${s.id}')">×</span>
       <div class="title">${esc(s.title)}</div><div class="meta">${ch} 章 · ${fmtDate(s.updatedAt)}更新</div></div></div>`;
   });
@@ -288,7 +352,7 @@ function importData(input) {
   reader.readAsText(file);
 }
 function newStory() {
-  const s = { id: uid(), title: '未命名故事', chapters: [{ id: uid(), title: '第一章', content: '' }], characters: [], illustrations: [], updatedAt: Date.now() };
+  const s = { id: uid(), title: '未命名故事', cover: COVER_EMOJI[state.stories.length % 6], chapters: [{ id: uid(), title: '第一章', content: '' }], characters: [], illustrations: [], updatedAt: Date.now() };
   state.stories.unshift(s); state.activeStory = s.id; state.activeChapter = s.chapters[0].id;
   save(); goTab('write');
 }
@@ -312,6 +376,7 @@ function renderWrite() {
     <div class="chap-bar">${chips}</div>
     ${ch ? `<div class="chap-title-row">
       <input value="${esc(ch.title)}" oninput="renameChap('${ch.id}',this.value)" placeholder="章節名">
+      <button class="icon-btn" id="readBtn" onclick="toggleRead()">🔊 朗讀</button>
       <button class="icon-btn" onclick="delChap('${ch.id}')">刪</button>
     </div>
     <textarea class="write-area" oninput="editChap('${ch.id}',this.value)" placeholder="喺呢度寫低你個故事…">${esc(ch.content)}</textarea>
@@ -323,7 +388,7 @@ function renderWrite() {
     </div>`;
 }
 function renameStory(v) { const s = getStory(); s.title = v; touchStory(); }
-function switchChap(id) { state.activeChapter = id; save(); renderWrite(); }
+function switchChap(id) { stopRead(); state.activeChapter = id; save(); renderWrite(); }
 function addChap() { const s = getStory(); const c = { id: uid(), title: '第' + (s.chapters.length+1) + '章', content: '' }; s.chapters.push(c); state.activeChapter = c.id; touchStory(); renderWrite(); }
 function renameChap(id, v) { const s = getStory(); const c = s.chapters.find(x => x.id === id); c.title = v; touchStory(); }
 function delChap(id) { const s = getStory(); if (s.chapters.length <= 1) { alert('至少要留返一章'); return; } if (!confirm('刪咗呢章？')) return; s.chapters = s.chapters.filter(c => c.id !== id); state.activeChapter = s.chapters[0].id; touchStory(); renderWrite(); }
