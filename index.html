@@ -112,7 +112,7 @@
 <div id="app">
   <header>
     <h1>故事工作室</h1>
-    <p>意念係你嘅，AI 淨係隻手 · v1.7</p>
+    <p>意念係你嘅，AI 淨係隻手 · v1.12</p>
   </header>
   <nav class="tabs">
     <button class="active" data-tab="library">故事架</button>
@@ -356,14 +356,22 @@ async function showSparks() {
   box.innerHTML = '<div class="spark-item" style="color:#888">AI 諗緊…等幾秒</div>';
   box.classList.add('show');
   const s = getStory();
-  const ai = await fetchAISparks(s);
+  let r = await fetchAISparks(s);
+  // fetch 失敗（timeout/網絡/429）自動重試一次；離題唔重試
+  if (!r.sparks.length && (r.reason === 'timeout' || r.reason === 'network' || r.reason === 'http429')) {
+    await new Promise(res => setTimeout(res, 3000));
+    r = await fetchAISparks(s);
+  }
   // 相關度檢查：AI 成日唔理 context 作啲無關嘢 — 冇一個靈感掂到故事關鍵字就當佢失敗
   const kws = sparkKeywords(s);
-  const ok = ai.length === 3 && sparksRelevant(ai, kws);
+  const ok = r.sparks.length >= 1 && sparksRelevant(r.sparks, kws);
   if (ok) {
-    box.innerHTML = ai.map(p => `<div class="spark-item">${esc(p)}</div>`).join('');
+    box.innerHTML = r.sparks.map(p => `<div class="spark-item">${esc(p)}</div>`).join('');
   } else {
-    box.innerHTML = '<div class="spark-item" style="color:#888">AI 忙緊，遲啲再撳過</div>';
+    const why = !r.sparks.length
+      ? (r.reason === 'timeout' ? '等太耐' : r.reason === 'network' ? '網絡問題' : r.reason === 'http429' ? '太多人用' : '出唔到嘢')
+      : '答得唔啱題';
+    box.innerHTML = `<div class="spark-item" style="color:#888">AI 忙緊（${why})，遲啲再撳過</div>`;
   }
 }
 // 故事關鍵字：標題、人物名、近排寫嘅字 — 用嚟驗 AI 有冇離題
@@ -381,6 +389,21 @@ function sparkKeywords(s) {
 function sparksRelevant(sparks, kws) {
   if (!kws.length) return true;
   return sparks.some(sp => { const l = sp.toLowerCase(); return kws.some(k => k && l.includes(k)); });
+}
+// 將 AI 回嚟嘅文字拆做靈感：每行一個，太長就斷句，最多 3 個
+function parseSparks(text) {
+  const lines = text.split('\n').map(l => l.replace(/^[\d\.\、\:\-\*\s#>「"]+/, '').trim()).filter(l => l.length > 8);
+  const out = [];
+  for (const line of lines) {
+    if (out.length >= 3) break;
+    if (line.length <= 260) { out.push(line); continue; }
+    // 太長：斷句，拎頭兩句
+    const sens = line.split(/(?<=[。！？.!?])\s*/).filter(x => x.trim().length > 8);
+    let sp = sens.slice(0, 2).join(' ');
+    if (sp.length > 260) sp = sp.slice(0, 257) + '…';
+    if (sp) out.push(sp);
+  }
+  return out;
 }
 // 真 AI：將故事 context 送去 LLM，即場諗靈感
 async function fetchAISparks(s) {
@@ -402,10 +425,12 @@ async function fetchAISparks(s) {
     const t = setTimeout(() => ctrl.abort(), 25000);
     const res = await fetch('https://text.pollinations.ai/' + encodeURIComponent(parts.join('\n')), { signal: ctrl.signal });
     clearTimeout(t);
-    if (!res.ok) return [];
+    if (!res.ok) return { sparks: [], reason: res.status === 429 ? 'http429' : 'http' + res.status };
     const text = await res.text();
-    return text.split('\n').map(l => l.replace(/^[\d\.\、\:\-\*\s]+/, '').trim()).filter(l => l.length > 8 && l.length < 150).slice(0, 3);
-  } catch (e) { return []; }
+    const sparks = parseSparks(text);
+    if (!sparks.length) return { sparks: [], reason: 'parse' };
+    return { sparks, reason: '' };
+  } catch (e) { return { sparks: [], reason: e && e.name === 'AbortError' ? 'timeout' : 'network' }; }
 }
 // 根據已寫嘅內容（人物名、故事名、章節）砌返相關嘅靈感
 function buildContextSparks(s) {
