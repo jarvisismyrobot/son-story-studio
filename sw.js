@@ -1,5 +1,5 @@
 // 故事工作室 service worker — 離線快取，讓 App 裝完就算冇網都開得返
-const CACHE = "story-studio-v18";
+const CACHE = "story-studio-v19";
 const ASSETS = [
   "./",
   "./index.html",
@@ -11,7 +11,13 @@ const ASSETS = [
 ];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // cache: 'reload' — 唔准用 HTTP cache，實牙實齒問 server 攞最新檔
+  // （唔加呢句，新 SW 會將舊 index.html 塞入新 cache，更新永遠唔生效）
+  e.waitUntil(
+    caches.open(CACHE)
+      .then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: "reload" }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (e) => {

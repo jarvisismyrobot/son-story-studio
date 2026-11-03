@@ -110,7 +110,7 @@
 <div id="app">
   <header>
     <h1>故事工作室</h1>
-    <p>意念係你嘅，AI 淨係隻手 · v1.25</p>
+    <p>意念係你嘅，AI 淨係隻手 · v1.26</p>
   </header>
   <nav class="tabs">
     <button class="active" data-tab="library">故事架</button>
@@ -914,11 +914,26 @@ async function checkUpdate() {
     const reg = await navigator.serviceWorker.getRegistration();
     if (!reg) { say('未啟用離線模式，開返網再試'); return; }
     say('檢查緊…');
-    await reg.update(); // 掠過 cache，直接問 GitHub 攞最新版
-    let done = false;
-    const go = () => { if (!done) { done = true; location.reload(); } };
-    navigator.serviceWorker.addEventListener('controllerchange', go);
-    setTimeout(go, 2500); // 保底：點都有 reload
+    await reg.update(); // 掠過 HTTP cache，直接問 GitHub 攞最新版 sw.js
+    // 等新 worker 出現（慢半拍都等埋）
+    let worker = reg.installing || reg.waiting;
+    if (!worker) {
+      worker = await new Promise(res => {
+        const t = setTimeout(() => res(null), 2000);
+        reg.addEventListener('updatefound', () => { clearTimeout(t); res(reg.installing); }, { once: true });
+      });
+    }
+    if (!worker) { say('已經係最新版 ✓'); return; }
+    say('下載緊新版…');
+    // 等到新 worker 真係 activated 先 reload，唔盲等
+    await new Promise(res => {
+      if (worker.state === 'activated') return res();
+      worker.addEventListener('statechange', () => {
+        if (worker.state === 'activated' || worker.state === 'redundant') res();
+      });
+      setTimeout(res, 15000); // 保底
+    });
+    location.reload();
   } catch (e) { say('檢查失敗，遲啲再試'); }
 }
 if ('serviceWorker' in navigator) {
