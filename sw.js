@@ -1,5 +1,5 @@
 // 故事工作室 service worker — 離線快取，讓 App 裝完就算冇網都開得返
-const CACHE = "story-studio-v16";
+const CACHE = "story-studio-v17";
 const ASSETS = [
   "./",
   "./index.html",
