@@ -110,7 +110,7 @@
 <div id="app">
   <header>
     <h1>故事工作室</h1>
-    <p>意念係你嘅，AI 淨係隻手 · v1.24</p>
+    <p>意念係你嘅，AI 淨係隻手 · v1.25</p>
   </header>
   <nav class="tabs">
     <button class="active" data-tab="library">故事架</button>
@@ -386,7 +386,7 @@ function newStory() {
   state.stories.unshift(s); state.activeStory = s.id; state.activeChapter = s.chapters[0].id;
   save(); markDirty(s.id); scheduleSync(); goTab('write');
 }
-function openStory(id) { state.activeStory = id; const s = getStory(); state.activeChapter = s.chapters[0] ? s.chapters[0].id : null; save(); goTab('write'); }
+function openStory(id) { state.activeStory = id; const s = getStory(); state.activeChapter = s.chapters[0] ? s.chapters[0].id : null; save(); scheduleSync(); goTab('write'); }
 function delStory(id) {
   state.stories = state.stories.filter(x => x.id !== id);
   if (state.activeStory === id) state.activeStory = null;
@@ -461,7 +461,7 @@ function renderWrite() {
   updateWordCount();
 }
 function renameStory(v) { const s = getStory(); s.title = v; touchStory(); }
-function switchChap(id) { stopRead(); state.activeChapter = id; save(); renderWrite(); }
+function switchChap(id) { stopRead(); state.activeChapter = id; save(); scheduleSync(); renderWrite(); }
 function addChap() { const s = getStory(); const c = { id: uid(), title: '第' + (s.chapters.length+1) + '章', content: '' }; s.chapters.push(c); state.activeChapter = c.id; touchStory(); renderWrite(); }
 function renameChap(id, v) { const s = getStory(); const c = s.chapters.find(x => x.id === id); c.title = v; touchStory(); }
 function delChap(id) { const s = getStory(); if (s.chapters.length <= 1) { alert('至少要留返一章'); return; } if (!confirm('刪咗呢章？')) return; s.chapters = s.chapters.filter(c => c.id !== id); state.activeChapter = s.chapters[0].id; touchStory(); renderWrite(); }
@@ -703,9 +703,15 @@ function setSyncStatus(t) { if (sync) sync.status = t; const el = document.getEl
 function markDirty(id) { if (id) dirtyStories.add(id); }
 function markAllDirty() { state.stories.forEach(s => dirtyStories.add(s.id)); }
 function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); }
+let firebaseInitPromise = null;
 async function ensureFirebase() {
+  if (db) return true;
+  if (!FIREBASE_READY) return false;
+  if (!firebaseInitPromise) firebaseInitPromise = doInitFirebase();
+  return firebaseInitPromise;
+}
+async function doInitFirebase() {
   try {
-    if (!FIREBASE_READY) return false;
     if (!window.firebase || !firebase.apps.length) {
       const V = '10.12.0';
       for (const f of ['firebase-app-compat.js', 'firebase-auth-compat.js', 'firebase-firestore-compat.js'])
@@ -713,13 +719,15 @@ async function ensureFirebase() {
       firebase.initializeApp(FIREBASE_CONFIG);
     }
     if (!firebase.auth().currentUser) await firebase.auth().signInAnonymously();
-    if (!db) {
-      db = firebase.firestore();
-      try { await db.enablePersistence({ synchronizeTabs: true }); } catch (e) {}
-    }
+    db = firebase.firestore();
+    try { await db.enablePersistence({ synchronizeTabs: true }); } catch (e) {}
     return true;
-  } catch (e) { return false; }
+  } catch (e) { firebaseInitPromise = null; return false; }
 }
+// 斷網再返嚟：自動重連
+window.addEventListener('online', () => {
+  if (FIREBASE_READY && sync && sync.code && !db) initSync();
+});
 // 本地一改就排隊同步（2 秒 debounce）
 function scheduleSync() {
   if (!FIREBASE_READY || !sync || !sync.code) return;
@@ -789,11 +797,11 @@ function attachSync() {
     if (changed) remoteChanged();
   }, () => setSyncStatus('同步斷線'));
 }
-// 收到遠端更新：save 咗先；打緊字就唔 rebuild（唔搶 focus），其他情況 render
+// 收到遠端更新：save 咗先；打緊字/改緊名就唔 rebuild（唔搶 focus），其他情況 render
 function remoteChanged() {
   save();
   const ae = document.activeElement;
-  const typing = ae && ae.classList && ae.classList.contains('write-area');
+  const typing = ae && /^(TEXTAREA|INPUT|SELECT)$/.test(ae.tagName);
   if (typing) { updateWordCount(); return; }
   render();
   setSyncStatus('收到更新 ✓');
