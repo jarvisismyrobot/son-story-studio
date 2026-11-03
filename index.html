@@ -100,13 +100,17 @@
 
   .story-picker { margin-bottom: 14px; }
   .story-picker select { width: 100%; background: #252542; color: #ffd369; border: none; border-radius: 10px; padding: 12px; font-size: 15px; font-weight: bold; font-family: inherit; outline: none; }
+
+  /* Sync */
+  .sync-block { background: #252542; border-radius: 14px; padding: 14px; margin-top: 12px; }
+  .sync-title { font-size: 14px; font-weight: bold; color: #ffd369; margin-bottom: 10px; }
 </style>
 </head>
 <body>
 <div id="app">
   <header>
     <h1>故事工作室</h1>
-    <p>意念係你嘅，AI 淨係隻手 · v1.22</p>
+    <p>意念係你嘅，AI 淨係隻手 · v1.23</p>
   </header>
   <nav class="tabs">
     <button class="active" data-tab="library">故事架</button>
@@ -184,7 +188,7 @@ function closeCoverPicker() {
 }
 function setCover(id, emoji) {
   const s = state.stories.find(x => x.id === id);
-  if (s) { s.cover = emoji; s.updatedAt = Date.now(); save(); }
+  if (s) { s.cover = emoji; s.updatedAt = Date.now(); save(); markDirty(id); scheduleSync(); }
   closeCoverPicker(); renderLibrary();
 }
 function uploadCover(id, input) {
@@ -287,7 +291,9 @@ function renderLibrary() {
       + `<div class="backup-row">
         <button class="backup-btn" onclick="document.getElementById('importFileEmpty').click()">📤 還原備份</button>
         <input type="file" id="importFileEmpty" accept=".json,application/json" style="display:none" onchange="importData(this)">
-      </div>`;
+      </div>
+      <div class="sync-block"><div class="sync-title">☁️ 跨裝置同步</div><div id="syncBody"></div></div>`;
+    renderSync();
     return;
   }
   let html = '<div class="story-grid">';
@@ -312,8 +318,10 @@ function renderLibrary() {
   <div class="backup-row" style="margin-top:10px">
     <button class="backup-btn" onclick="checkUpdate()">🔄 檢查更新</button>
   </div>
-  <div class="backup-note" id="updateNote"></div>`;
+  <div class="backup-note" id="updateNote"></div>
+  <div class="sync-block"><div class="sync-title">☁️ 跨裝置同步</div><div id="syncBody"></div></div>`;
   el.innerHTML = html;
+  renderSync();
 }
 // 備份：成個 state 下載做 JSON（export 前先將舊 remote 圖轉做 dataURL，確保齊圖）
 async function exportData() {
@@ -366,7 +374,7 @@ function importData(input) {
       if (!confirm(`搵到 ${data.stories.length} 個故事。還原會覆寫而家全部內容，肯定？`)) { input.value = ''; return; }
       state = data;
       if (!getStory() && state.stories.length) state.activeStory = state.stories[0].id;
-      save(); render();
+      save(); markAllDirty(); pushSync(); render();
       alert('還原完成！');
     } catch (err) { alert('呢個唔係有效嘅備份檔'); }
     input.value = '';
@@ -376,13 +384,13 @@ function importData(input) {
 function newStory() {
   const s = { id: uid(), title: '未命名故事', cover: COVER_EMOJI[state.stories.length % 6], chapters: [{ id: uid(), title: '第一章', content: '' }], characters: [], illustrations: [], updatedAt: Date.now() };
   state.stories.unshift(s); state.activeStory = s.id; state.activeChapter = s.chapters[0].id;
-  save(); goTab('write');
+  save(); markDirty(s.id); scheduleSync(); goTab('write');
 }
 function openStory(id) { state.activeStory = id; const s = getStory(); state.activeChapter = s.chapters[0] ? s.chapters[0].id : null; save(); goTab('write'); }
 function delStory(id) {
   state.stories = state.stories.filter(x => x.id !== id);
   if (state.activeStory === id) state.activeStory = null;
-  save(); render();
+  save(); markDirty(id); scheduleSync(); render();
 }
 // 刪除兩步：撳 🗑 → 出「取消 / 長㩒10秒刪除」
 function askDelStory(id) {
@@ -422,7 +430,7 @@ function pressDelEnd() {
     pressTarget = null;
   }
 }
-function touchStory() { const s = getStory(); if (s) { s.updatedAt = Date.now(); save(); } }
+function touchStory() { const s = getStory(); if (s) { s.updatedAt = Date.now(); save(); markDirty(state.activeStory); scheduleSync(); } }
 
 // ============ Write ============
 let saveTimer = null;
@@ -652,7 +660,242 @@ function render() {
   else if (activeTab === 'write') renderWrite();
   else if (activeTab === 'chars') renderChars();
 }
-render();
+
+// ============ ☁️ 跨裝置同步（Firebase）============
+// 設定方法（做一次）：
+// 1. console.firebase.google.com 開新 project（預設 Spark 免費 plan，唔使綁卡，唔好 upgrade 去 Blaze）
+// 2. Build → Firestore Database → Create database（production mode，location 揀 asia-east2 Hong Kong）
+// 3. Firestore → Rules：貼入下面 SYNC_RULES，Publish
+// 4. Build → Authentication → Sign-in method → 開 Anonymous
+// 5. Project settings → Your apps → Add Web app → 將 firebaseConfig 貼入下面
+// （apiKey 擺喺 client 係正常嘅，安全靠 Rules 唔靠收埋條 key）
+const FIREBASE_CONFIG = {
+  apiKey: "未設定",
+  authDomain: "未設定",
+  projectId: "未設定",
+  storageBucket: "未設定",
+  messagingSenderId: "未設定",
+  appId: "未設定"
+};
+/* SYNC_RULES（貼去 Firestore → Rules → Publish）：
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /storyStudio/{code}/{doc=**} {
+      allow read, write: if code.matches('^[A-Z2-9]{8}$');
+    }
+  }
+}
+*/
+const FIREBASE_READY = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== '未設定';
+const SYNC_KEY = 'storyStudioSync';
+const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+let sync = loadSync();
+let db = null, syncTimer = null, metaUnsub = null, storiesUnsub = null;
+const dirtyStories = new Set();
+if (sync) { sync.writerId = uid(); sync.status = ''; }
+
+function loadSync() { try { return JSON.parse(localStorage.getItem(SYNC_KEY)); } catch (e) { return null; } }
+function saveSyncCode(code) { sync = { code, writerId: uid(), status: '' }; try { localStorage.setItem(SYNC_KEY, JSON.stringify({ code })); } catch (e) {} }
+function genCode() { let c = ''; for (let i = 0; i < 8; i++) c += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)]; return c; }
+function fmtCode(c) { return c.slice(0, 4) + '-' + c.slice(4); }
+function setSyncStatus(t) { if (sync) sync.status = t; const el = document.getElementById('syncStatus'); if (el) el.textContent = t; }
+function markDirty(id) { if (id) dirtyStories.add(id); }
+function markAllDirty() { state.stories.forEach(s => dirtyStories.add(s.id)); }
+function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); }
+async function ensureFirebase() {
+  try {
+    if (!FIREBASE_READY) return false;
+    if (!window.firebase || !firebase.apps.length) {
+      const V = '10.12.0';
+      for (const f of ['firebase-app-compat.js', 'firebase-auth-compat.js', 'firebase-firestore-compat.js'])
+        await loadScript('https://www.gstatic.com/firebasejs/' + V + '/' + f);
+      firebase.initializeApp(FIREBASE_CONFIG);
+    }
+    if (!firebase.auth().currentUser) await firebase.auth().signInAnonymously();
+    if (!db) {
+      db = firebase.firestore();
+      try { await db.enablePersistence({ synchronizeTabs: true }); } catch (e) {}
+    }
+    return true;
+  } catch (e) { return false; }
+}
+// 本地一改就排隊同步（2 秒 debounce）
+function scheduleSync() {
+  if (!FIREBASE_READY || !sync || !sync.code) return;
+  clearTimeout(syncTimer);
+  setSyncStatus('同步緊…');
+  syncTimer = setTimeout(() => pushSync(), 2000);
+}
+async function pushSync() {
+  clearTimeout(syncTimer);
+  if (!FIREBASE_READY || !sync || !sync.code) return;
+  if (!db) {
+    const ok = await ensureFirebase();
+    if (!ok) { setSyncStatus('連唔到 Firebase'); return; }
+    attachSync();
+  }
+  try {
+    const metaRef = db.collection('storyStudio').doc(sync.code);
+    const batch = db.batch();
+    sync.rev = (sync.rev || 0) + 1;
+    batch.set(metaRef, { order: state.stories.map(s => s.id), activeStory: state.activeStory, activeChapter: state.activeChapter, writerId: sync.writerId, rev: sync.rev, updatedAt: Date.now() }, { merge: true });
+    for (const sid of [...dirtyStories]) {
+      dirtyStories.delete(sid);
+      const st = state.stories.find(s => s.id === sid);
+      const ref = metaRef.collection('stories').doc(sid);
+      if (st) {
+        if (JSON.stringify(st).length > 900000) { setSyncStatus('有故事太大，同步唔到'); continue; }
+        batch.set(ref, { story: st, writerId: sync.writerId, rev: sync.rev, updatedAt: Date.now() });
+      } else batch.delete(ref);
+    }
+    await batch.commit();
+    setSyncStatus('已同步 ✓ ' + new Date().toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit' }));
+  } catch (e) { setSyncStatus('同步失敗，遲啲再試'); }
+}
+function attachSync() {
+  if (!db || !sync || !sync.code) return;
+  const metaRef = db.collection('storyStudio').doc(sync.code);
+  if (metaUnsub) metaUnsub();
+  if (storiesUnsub) storiesUnsub();
+  metaUnsub = metaRef.onSnapshot(snap => {
+    const d = snap.data();
+    if (!d || d.writerId === sync.writerId) return;
+    if (Array.isArray(d.order)) {
+      const map = new Map(state.stories.map(s => [s.id, s]));
+      const next = d.order.map(id => map.get(id)).filter(Boolean);
+      for (const [id, s] of map) if (!d.order.includes(id)) next.push(s);
+      state.stories = next;
+    }
+    remoteChanged();
+  }, () => setSyncStatus('同步斷線'));
+  storiesUnsub = metaRef.collection('stories').onSnapshot(snap => {
+    let changed = false;
+    snap.docChanges().forEach(chg => {
+      const d = chg.doc.data();
+      if (!d || d.writerId === sync.writerId) return;
+      const sid = chg.doc.id;
+      if (dirtyStories.has(sid)) return; // 本地有未推嘅修改，本地贏
+      if (chg.type === 'removed') {
+        state.stories = state.stories.filter(s => s.id !== sid);
+        if (state.activeStory === sid) state.activeStory = state.stories[0] ? state.stories[0].id : null;
+        changed = true;
+      } else if (d.story) {
+        const i = state.stories.findIndex(s => s.id === sid);
+        if (i >= 0) state.stories[i] = d.story; else state.stories.push(d.story);
+        changed = true;
+      }
+    });
+    if (changed) remoteChanged();
+  }, () => setSyncStatus('同步斷線'));
+}
+// 收到遠端更新：save 咗先；打緊字就唔 rebuild（唔搶 focus），其他情況 render
+function remoteChanged() {
+  save();
+  const ae = document.activeElement;
+  const typing = ae && ae.classList && ae.classList.contains('write-area');
+  if (typing) { updateWordCount(); return; }
+  render();
+  setSyncStatus('收到更新 ✓');
+}
+async function newSyncCode() {
+  const code = genCode();
+  const msg = state.stories.length
+    ? `新同步碼：${fmtCode(code)}\n會將呢部機嘅 ${state.stories.length} 個故事上載。繼續？`
+    : `新同步碼：${fmtCode(code)}\n喺另一部機輸入同一個碼就同步到。`;
+  if (!confirm(msg)) return;
+  setSyncStatus('連緊…'); renderSync();
+  const ok = await ensureFirebase();
+  if (!ok) { alert('連唔到 Firebase，檢查網絡同設定'); setSyncStatus('連唔到'); return; }
+  saveSyncCode(code);
+  attachSync();
+  markAllDirty();
+  await pushSync();
+  renderSync();
+}
+function inputSyncCode() {
+  const raw = prompt('輸入 8 位同步碼（另一部機顯示嗰個）：');
+  if (!raw) return;
+  const code = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (code.length !== 8) { alert('同步碼係 8 位英數字'); return; }
+  joinSync(code);
+}
+async function joinSync(code) {
+  setSyncStatus('連緊…'); renderSync();
+  const ok = await ensureFirebase();
+  if (!ok) { alert('連唔到 Firebase，檢查網絡同設定'); setSyncStatus('連唔到'); return; }
+  const metaRef = db.collection('storyStudio').doc(code);
+  let metaSnap, storiesSnap;
+  try {
+    metaSnap = await metaRef.get();
+    storiesSnap = await metaRef.collection('stories').get();
+  } catch (e) { alert('讀唔到同步資料（' + (e.code || '未知錯誤') + '）'); setSyncStatus('連唔到'); return; }
+  const hasRemote = metaSnap.exists || !storiesSnap.empty;
+  if (hasRemote) {
+    const ids = new Set(state.stories.map(s => s.id));
+    storiesSnap.forEach(d => {
+      const data = d.data();
+      if (data && data.story && !ids.has(data.story.id)) { state.stories.push(data.story); ids.add(data.story.id); }
+    });
+    const md = metaSnap.data();
+    if (md && Array.isArray(md.order)) {
+      const map = new Map(state.stories.map(s => [s.id, s]));
+      const next = md.order.map(id => map.get(id)).filter(Boolean);
+      for (const [id, s] of map) if (!md.order.includes(id)) next.push(s);
+      state.stories = next;
+    }
+    if (!getStory() && state.stories.length) state.activeStory = state.stories[0].id;
+    save();
+  } else if (state.stories.length && !confirm(`呢個同步碼係新嘅，會將呢部機嘅 ${state.stories.length} 個故事上載。繼續？`)) {
+    return;
+  }
+  saveSyncCode(code);
+  attachSync();
+  markAllDirty();
+  await pushSync();
+  render();
+  alert('同步已連接！');
+}
+function copySyncCode() {
+  const c = fmtCode(sync.code);
+  if (navigator.clipboard && navigator.clipboard.writeText)
+    navigator.clipboard.writeText(c).then(() => alert('已複製：' + c)).catch(() => prompt('抄低個同步碼：', c));
+  else prompt('抄低個同步碼：', c);
+}
+function disableSync() {
+  if (!confirm('停用同步？呢部機嘅故事會保留，唔再同其他機同步。')) return;
+  try { localStorage.removeItem(SYNC_KEY); } catch (e) {}
+  if (metaUnsub) metaUnsub();
+  if (storiesUnsub) storiesUnsub();
+  metaUnsub = storiesUnsub = null; db = null; sync = null; dirtyStories.clear();
+  render();
+}
+function renderSync() {
+  const el = document.getElementById('syncBody');
+  if (!el) return;
+  if (!FIREBASE_READY) { el.innerHTML = '<div class="backup-note">未設定 Firebase（睇 README 嘅同步設定）</div>'; return; }
+  if (!sync || !sync.code) {
+    el.innerHTML = `<div class="backup-row" style="margin-top:0">
+      <button class="backup-btn" onclick="newSyncCode()">開新同步碼</button>
+      <button class="backup-btn" onclick="inputSyncCode()">輸入同步碼</button></div>
+      <div class="backup-note">兩部機用同一個碼就同步到</div>`;
+    return;
+  }
+  el.innerHTML = `<div class="backup-note" style="text-align:left">狀態：<span id="syncStatus">${esc(sync.status || '未連接')}</span><br>同步碼：<b style="color:#ffd369">${fmtCode(sync.code)}</b></div>
+    <div class="backup-row">
+      <button class="backup-btn" onclick="copySyncCode()">複製同步碼</button>
+      <button class="backup-btn" onclick="disableSync()">停用</button>
+    </div>`;
+}
+async function initSync() {
+  renderSync();
+  if (!sync || !sync.code || !FIREBASE_READY) return;
+  setSyncStatus('連緊…');
+  const ok = await ensureFirebase();
+  if (ok) { attachSync(); setSyncStatus('已連接'); }
+  else setSyncStatus('連唔到');
+  renderSync();
+}
 
 // ============ PWA: service worker ============
 async function checkUpdate() {
@@ -675,6 +918,10 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   });
 }
+
+// boot
+render();
+initSync();
 </script>
 </body>
 </html>
